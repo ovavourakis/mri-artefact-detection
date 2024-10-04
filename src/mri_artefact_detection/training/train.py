@@ -4,54 +4,70 @@
 
 # IMPORTS
 import os, numpy as np, pandas as pd
-from train_utils import *
-from model import *
+from .train_utils import *
+from .model import *
 
 import tensorflow as tf, keras
 from keras.metrics import AUC
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 
-# CONSTANTS
-SAVEDIR = '/vols/opig/users/vavourakis/ge_project/trainrun'
-DATADIR = '/data/nagagpu04/not-backed-up/nvme00/vavourakis/struc_data'
-DATASETS = ['artefacts'+str(i) for i in [1,2,3]]
-CONTRASTS = ['T1wMPR']#, 'T1wTIR', 'T2w', 'T2starw', 'FLAIR']
-QUALS = ['clean', 'exp_artefacts']
+def train_model(
+    savedir,
+    datadir,
+    datasets=('artefacts'+str(i) for i in [1,2,3]),
+    contrasts=('T1wMPR'),  # 'T1wTIR', 'T2w', 'T2starw', 'FLAIR'
+    quals=('clean', 'exp_artefacts'),
+    random_affine=1/12,
+    random_elastic_deformation=1/12,
+    random_anisotropy=1/12,
+    rescale_intensity=1/12,
+    random_motion=1/12,
+    random_ghosting=1/12,
+    random_spike=1/12,
+    random_bias_field=1/12,
+    random_blur=1/12,
+    random_noise=1/12,
+    random_swap=1/12,
+    random_gamma=1/12,
+    target_clean_ratio=0.5,  # re-sample training set to this fraction of clean images
+    mc_runs=20  # number of Monte Carlo runs on test set
+):
+    """
+    Trains a convolutional neural network model for MRI artefact detection.
 
-ARTEFACT_DISTRO = {
-    'RandomAffine' : 1/12,
-    'RandomElasticDeformation' : 1/12,
-    'RandomAnisotropy' : 1/12,
-    'RescaleIntensity' : 1/12,
-    'RandomMotion' : 1/12,
-    'RandomGhosting' : 1/12,
-    'RandomSpike' : 1/12,
-    'RandomBiasField' : 1/12,
-    'RandomBlur' : 1/12,
-    'RandomNoise' : 1/12,
-    'RandomSwap' : 1/12,
-    'RandomGamma' : 1/12
-}
+    Parameters:
+    savedir (str): Directory where training outputs and checkpoints will be saved.
+    datadir (str): Directory containing the dataset.
+    datasets (list): List of dataset names to be used for training.
+    contrasts (list): List of MRI contrasts to be considered.
+    quals (list): List of quality labels (e.g., 'clean', 'exp_artefacts').
+    random_affine (float): Distribution weight for RandomAffine artefact.
+    random_elastic_deformation (float): Distribution weight for RandomElasticDeformation artefact.
+    random_anisotropy (float): Distribution weight for RandomAnisotropy artefact.
+    rescale_intensity (float): Distribution weight for RescaleIntensity artefact.
+    random_motion (float): Distribution weight for RandomMotion artefact.
+    random_ghosting (float): Distribution weight for RandomGhosting artefact.
+    random_spike (float): Distribution weight for RandomSpike artefact.
+    random_bias_field (float): Distribution weight for RandomBiasField artefact.
+    random_blur (float): Distribution weight for RandomBlur artefact.
+    random_noise (float): Distribution weight for RandomNoise artefact.
+    random_swap (float): Distribution weight for RandomSwap artefact.
+    random_gamma (float): Distribution weight for RandomGamma artefact.
+    target_clean_ratio (float): Fraction of clean images to be resampled in the training set.
+    mc_runs (int): Number of Monte Carlo runs on the test set.
+    """
+    # ENABLE GPU IF PRESENT
+    physical_devices = tf.config.list_physical_devices('GPU')
+    if len(physical_devices) > 0:
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        print("Using GPU\n")
+    else:
+        print("Using CPU\n")
 
-TARGET_CLEAN_RATIO = 0.5 # re-sample training set to this fraction of clean images
-MC_RUNS = 20  # number of Monte Carlo runs on test set
-
-# ENABLE GPU IF PRESENT
-physical_devices = tf.config.list_physical_devices('GPU')
-if len(physical_devices) > 0:
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    print("Using GPU\n")
-else:
-    print("Using CPU\n")
-
-
-
-if __name__ == '__main__':
-    
-    os.makedirs(SAVEDIR, exist_ok=True)
+    os.makedirs(savedir, exist_ok=True)
 
     # get the paths and labels of the real images
-    real_image_paths, pids, real_labels = DataCrawler(DATADIR, DATASETS, CONTRASTS, QUALS).crawl()
+    real_image_paths, pids, real_labels = DataCrawler(datadir, datasets, contrasts, quals).crawl()
 
     # split images by patient id
     Xtrain, Xval, Xtest, ytrain, yval, ytest = split_by_patient(real_image_paths, pids, real_labels)
@@ -61,20 +77,35 @@ if __name__ == '__main__':
         print(string + ' class distribution: ', sum(y)/len(y), ' percent artefact')
 
     # instantiate DataLoaders
+    artefact_distro = {
+        'RandomAffine': random_affine,
+        'RandomElasticDeformation': random_elastic_deformation,
+        'RandomAnisotropy': random_anisotropy,
+        'RescaleIntensity': rescale_intensity,
+        'RandomMotion': random_motion,
+        'RandomGhosting': random_ghosting,
+        'RandomSpike': random_spike,
+        'RandomBiasField': random_bias_field,
+        'RandomBlur': random_blur,
+        'RandomNoise': random_noise,
+        'RandomSwap': random_swap,
+        'RandomGamma': random_gamma
+    }
+    
     trainloader = DataLoader(Xtrain, ytrain, train_mode=True,
-                            image_shape = (192,256,256), batch_size=10,
-                            target_clean_ratio=TARGET_CLEAN_RATIO, artef_distro=ARTEFACT_DISTRO)
+                            image_shape=(192,256,256), batch_size=10,
+                            target_clean_ratio=target_clean_ratio, artef_distro=artefact_distro)
     valloader = DataLoader(Xval, yval, train_mode=False,
-                        batch_size=15, image_shape = (192,256,256))
-    testloader = DataLoader(Xtest*MC_RUNS, np.array(ytest.tolist()*MC_RUNS),
+                        batch_size=15, image_shape=(192,256,256))
+    testloader = DataLoader(Xtest*mc_runs, np.array(ytest.tolist()*mc_runs),
                             train_mode=False,
-                            batch_size=15, image_shape = (192,256,256))
+                            batch_size=15, image_shape=(192,256,256))
 
     # write out ground truth for test set
     test_images = [file for sublist in testloader.batches for file in sublist]
     y_true_test = [y for sublist in testloader.labels for y in sublist]
     out = pd.DataFrame({'image': test_images, 'bin_gt': y_true_test}).groupby('image').agg({'bin_gt': 'first'})
-    out.to_csv(os.path.join(SAVEDIR, 'test_split_gt.tsv'), sep='\t')
+    out.to_csv(os.path.join(savedir, 'test_split_gt.tsv'), sep='\t')
 
     # compile model
     model = getConvNet(out_classes=2, input_shape=(192,256,256,1))
@@ -87,7 +118,7 @@ if __name__ == '__main__':
     print(model.summary())
 
     # prepare for training
-    checkpoint_dir = os.path.join(SAVEDIR, "ckpts")
+    checkpoint_dir = os.path.join(savedir, "ckpts")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     # define callbacks
@@ -120,8 +151,8 @@ if __name__ == '__main__':
         'val_auc': history.history['val_auroc'],
         'train_ap': history.history['auprc'],
         'val_ap': history.history['val_auprc']
-    }).to_csv(os.path.join(SAVEDIR, 'training_metrics.tsv'), sep='\t')
-    plot_train_metrics(history, os.path.join(SAVEDIR, 'train_metrics_plot.png'))
+    }).to_csv(os.path.join(savedir, 'training_metrics.tsv'), sep='\t')
+    plot_train_metrics(history, os.path.join(savedir, 'train_metrics_plot.png'))
 
     # evaluate model (multiple MC runs per test image)
     print("#"*30)
@@ -133,13 +164,13 @@ if __name__ == '__main__':
                        'bin_gt': y_true_test, 
                        'y_pred': y_pred[:,1]})
     df = df.groupby('image').agg({'bin_gt': 'first', 'y_pred': list})
-    df[[f'y_pred{i}' for i in range(MC_RUNS)]] = pd.DataFrame(df['y_pred'].tolist(), index=df.index)
+    df[[f'y_pred{i}' for i in range(mc_runs)]] = pd.DataFrame(df['y_pred'].tolist(), index=df.index)
     df = df.drop(columns='y_pred')
-    df.to_csv(os.path.join(SAVEDIR, 'raw_preds_test.tsv'), sep='\t')
+    df.to_csv(os.path.join(savedir, 'raw_preds_test.tsv'), sep='\t')
 
     # calculate AUROC, AP on each MC run individually
     aurocs, aps = [], []
-    for i in range(MC_RUNS):
+    for i in range(mc_runs):
         aurocs.append(AUC(curve='ROC')(df['bin_gt'], df[f'y_pred{i}']))
         aps.append(AUC(curve='PR')(df['bin_gt'], df[f'y_pred{i}']))
     print('mean AUROC on test:', np.mean(aurocs))
