@@ -1,1 +1,0 @@
-from mri_artefact_detection import mri_artefact_detection
