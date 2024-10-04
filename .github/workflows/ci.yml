@@ -24,12 +24,10 @@ jobs:
         run: poetry install
 
       - name: Test with pytest
-        run: poetry run pytest tests/ --cov=mri_artefact_detection --cov-report=xml
+        run: poetry run pytest
 
-      - name: Use Codecov to track coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml # coverage report
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2
 
       - name: Build documentation
         run: poetry run make html --directory docs/
