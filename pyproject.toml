@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "mri_artefact_detection"
+version = "0.0.1"
+description = "A convolutional neural network to detect the presence of acquisition artefacts in MRI brain image volumes."
+authors = ["Odysseas Vavourakis, Iris Marmouset-De La Taille Tretin"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10.4,<3.13"
+tensorflow = {extras = ["and-cuda"], version = "^2.17.0"}
+torchio = "^0.20.0"
+numpy = "<2.0.0"
+matplotlib = "^3.9.2"
+scikit-learn = "^1.5.2"
+keras = "^3.6.0"
+pandas = "^2.2.3"
+seaborn = "^0.13.2"
+tqdm = "^4.66.5"
+
+[tool.poetry.dev-dependencies]
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://anaconda.org/pytorch"
+priority = "supplemental"
+
+
+[[tool.poetry.source]]
+name = "nvidia"
+url = "https://anaconda.org/nvidia"
+priority = "supplemental"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
