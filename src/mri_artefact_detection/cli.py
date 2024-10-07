@@ -1,5 +1,7 @@
 import click
 from mri_artefact_detection.training.train import train_model
+from mri_artefact_detection.inference.inference import run_model_inference
+from mri_artefact_detection.evaluation.run_analysis import evaluate
 
 @click.group()
 def main():
@@ -55,4 +57,32 @@ def train(savedir, datadir, datasets, contrasts, quals, random_affine, random_el
         random_gamma=random_gamma,
         target_clean_ratio=target_clean_ratio,
         mc_runs=mc_runs
+    )
+
+@main.command()
+@click.option('--savedir', required=True, type=click.Path(), help='Directory where inference outputs will be saved.')
+@click.option('--weights', required=True, type=click.Path(), help='Path to the pre-trained model weights.')
+@click.option('--gt-data', required=True, type=click.Path(), help='Path to the ground truth data file.')
+@click.option('--mc-runs', default=20, type=int, help='Number of Monte Carlo runs on the test set. (default: 20)')
+def infer(savedir, weights, gt_data, mc_runs):
+    """
+    Command to perform inference using the MRI artefact detection model.
+    """
+    run_model_inference(
+        savedir=savedir,
+        weights=weights,
+        gt_data=gt_data,
+        mc_runs=mc_runs
+    )
+
+@main.command()
+@click.option('--model-preds', required=True, type=click.Path(), help='Path to the model predictions file.')
+@click.option('--ternary', is_flag=True, help='Flag to indicate ternary analysis. (default: False)')
+def eval(model_preds, ternary):
+    """
+    Command to evaluate the MRI artefact detection model.
+    """
+    evaluate(
+        MODEL_PREDS=model_preds,
+        TERNARY=ternary
     )

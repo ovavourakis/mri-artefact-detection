@@ -2,51 +2,21 @@ import os, math, pandas as pd, numpy as np, matplotlib.pyplot as plt, seaborn as
 from sklearn.metrics import average_precision_score, roc_auc_score, f1_score, precision_score, recall_score, confusion_matrix
 from tqdm import tqdm
 
-# def load_predictions_and_ground_truth_4(MODEL_PREDS, GROUND_TRUTH):
-#     ground_truth_labels = pd.read_csv(GROUND_TRUTH, sep='\t')
-#     ground_truth_labels.columns = ['id', 'bin_gt']
-    
-#     model_preds = pd.read_csv(MODEL_PREDS, sep='\t')
-#     model_preds.drop(columns=['bin_gt'], inplace=True)
-#     model_preds.set_index('image', inplace=True)
-#     return ground_truth_labels, model_preds
-
-# def load_predictions_and_ground_truth_3(MODEL_PREDS, GROUND_TRUTH):
-#     # read ground-truth and binarise to 0: clean, 1: artefact
-#     ground_truth_labels = pd.read_csv(GROUND_TRUTH)
-#     ground_truth_labels.drop_duplicates(subset=['id'], inplace=True) # delete duplicate rows
-#     ground_truth_labels['id'] = ground_truth_labels['id'] .str.split('/').str[-1].str.split('.').str[0]
-#     # read model predictions
-#     model_preds = pd.read_csv(MODEL_PREDS, sep=',', header=None)
-#     model_preds.loc[:,0] = model_preds.loc[:,0].str.split('/').str[-1].str.split('.').str[0]
-#     model_preds.set_index(0, inplace=True)
-
-#     return ground_truth_labels, model_preds
-
-# def load_predictions_and_ground_truth_2(MODEL_PREDS, GROUND_TRUTH):
-#     # read ground-truth and binarise to 0: clean, 1: artefact
-#     ground_truth_labels = pd.read_csv(GROUND_TRUTH, delim_whitespace=True)
-#     ground_truth_labels.drop_duplicates(subset=['id'], inplace=True) # delete duplicate rows
-#     ground_truth_labels['id'] = ground_truth_labels['id'] .str.split('/').str[-1].str.split('.').str[0]
-#     # read model predictions
-#     model_preds = pd.read_csv(MODEL_PREDS, sep=',', header=None)
-#     model_preds.loc[:,0] = model_preds.loc[:,0].str.split('/').str[-1].str.split('.').str[0]
-#     model_preds.set_index(0, inplace=True)
-
-#     return ground_truth_labels, model_preds
-
-# def load_predictions_and_ground_truth(MODEL_PREDS, GROUND_TRUTH):
-#     # read ground-truth and binarise to 0: clean, 1: artefact
-#     ground_truth_labels = pd.read_csv(GROUND_TRUTH, sep='\t')
-#     ground_truth_labels.rename(columns={'image': 'id', 'bin_gt':'gt_score'}, inplace=True)
-#     ground_truth_labels.set_index('id', inplace=True)
-#     # read model predictions
-#     model_preds = pd.read_csv(MODEL_PREDS, sep='\t')
-#     model_preds.rename(columns={'image': 'id'}, inplace=True)
-#     model_preds
-#     return ground_truth_labels, model_preds
-
 def load_predictions_and_ground_truth(MODEL_PREDS):
+    """
+    Read out test set predictions and ground-truth labels from a tab-separated file 
+    with the following format
+
+            image                           bin_gt      pred_1    ...       pred_20
+            sub-926536_acq-headmotion1_T1w  1           0.433381  ...  5.049924e-01
+            sub-926536_acq-standard_T1w     0           0.003448  ...  6.611057e-02
+
+    and split them into separate dataframes.
+
+    Args:
+        MODEL_PREDS: path to the tab-separated file
+            
+    """
     model_preds = pd.read_csv(MODEL_PREDS, sep='\t')
     model_preds.rename(columns={'image': 'id'}, inplace=True)
     model_preds.set_index('id', inplace=True)
@@ -54,69 +24,71 @@ def load_predictions_and_ground_truth(MODEL_PREDS):
     model_preds.drop(columns=['bin_gt'], inplace=True)
     return ground_truth_labels, model_preds
 
-# def load_predictions_GE(PREDS_DIR):
-#     # read model predictions with artefacts 
-#     model_preds = pd.read_csv(PREDS_DIR+'/GE_with_artefacts.csv', sep=',', header=None)
-#     model_preds.loc[:,0] = model_preds.loc[:,0].str.split('/').str[-1].str.split('.').str[0]
-#     model_preds.set_index(0, inplace=True)    
-#     # corresponding ground truth
-#     ground_truth_labels = pd.DataFrame(model_preds.index)
-#     ground_truth_labels['bin_gt'] = pd.Series(np.ones(ground_truth_labels.shape[0]))
-#     ground_truth_labels.rename(columns={0: 'id'}, inplace=True)
-
-#     # read model predictions without artefacts
-#     model_preds_1 = pd.read_csv(PREDS_DIR+'/GE_clean.csv', sep=',', header=None)
-#     model_preds_1.loc[:,0] = model_preds_1.loc[:,0].str.split('/').str[-1].str.split('.').str[0]
-#     model_preds_1.set_index(0, inplace=True)
-#     # corresponding ground truth
-#     ground_truth_labels_1 = pd.DataFrame(model_preds_1.index)
-#     ground_truth_labels_1['bin_gt'] = pd.Series(np.zeros(ground_truth_labels_1.shape[0]))
-#     ground_truth_labels_1.rename(columns={0: 'id'}, inplace=True)
-
-#     # read model predictions on mixed data
-#     model_preds_2 = pd.read_csv(PREDS_DIR+'/GE_mixed.csv', sep=',', header=None)
-#     model_preds_2.loc[:,0] = model_preds_2.loc[:,0].str.split('/').str[-1]
-#     model_preds_2.set_index(0, inplace=True)
-#     # corresponding ground truth
-#     ground_truth_labels_2 = pd.DataFrame(model_preds_2.index)
-#     ground_truth_labels_2['bin_gt'] = pd.Series(np.zeros(ground_truth_labels_2.shape[0]))
-#     ground_truth_labels_2.rename(columns={0: 'id'}, inplace=True)
-
-#     # exclude all flair images
-#     model_preds_2_sans_flair = model_preds_2[~model_preds_2.index.str.contains('flair')]
-#     ground_truth_labels_2_sans_flair = ground_truth_labels_2[~ground_truth_labels_2['id'].str.contains('flair')]
-
-#     # set selected flair images to 1
-#     problematic_set = ['3823', '4033', '5241', '5352', '7845', '9916'] # not all of these HAVE flair images in the results?
-#     problematic_ids = '|'.join([i+'.flair' for i in problematic_set])
-#     ground_truth_labels_2.loc[model_preds_2.index.str.contains(problematic_ids), 'bin_gt'] = 1
-
-#     # merge all data
-#     model_preds_sans_flair = pd.concat([model_preds, model_preds_1, model_preds_2_sans_flair])
-#     ground_truth_labels_sans_flair = pd.concat([ground_truth_labels, ground_truth_labels_1, ground_truth_labels_2_sans_flair])
-
-#     model_preds_con_flair = pd.concat([model_preds, model_preds_1, model_preds_2])
-#     ground_truth_labels_con_flair = pd.concat([ground_truth_labels, ground_truth_labels_1, ground_truth_labels_2])
-
-#     return ground_truth_labels_sans_flair, model_preds_sans_flair, ground_truth_labels_con_flair, model_preds_con_flair
-#     # return ground_truth_labels_con_flair, model_preds_con_flair
-
 def assign_class(raw_prob, thresh=0.5):
+    """
+    Binarises a value based on a threshold (0 if below, 1 if above).
+    Used to convert raw model probabilities to predicted classes (clean/artefact).
+    """
     return 1 if raw_prob >= thresh else 0
 
 def compute_mean_class_and_uncertainty(raw_model_preds, num_mc_runs=20, thresh=0.5):
-    # this is for option (A): predictive probability = average predicted class
+    """
+    Aggregate model predictions on each sample into single predictive probability
+    via OPTION (A):
+        predictive probability = average predicted class
+
+    Args:
+        - raw_model_preds: dataframe of raw model predictions with format:
+                                            pred_1    ...       pred_20
+            image
+            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
+            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
+        - num_mc_runs: number of Monte Carlo runs (consider first k predictions per sample)
+        - thresh: threshold for class assignment
+
+    Returns:
+        - the mean class for each sample
+        - the standard deviation around that mean.
+    """
     model_assigned_classes = raw_model_preds.iloc[:, :num_mc_runs].apply(lambda x: x.map(lambda y: assign_class(y, thresh=thresh)))
     return model_assigned_classes.mean(axis=1), model_assigned_classes.std(axis=1)
 
 def compute_mean_prob_and_uncertainty(raw_model_preds, num_mc_runs=20):
-    # this is for option (B): predictive probability = average predictive probability
+    """
+    Aggregate model predictions on each sample into single predictive probability
+    via OPTION (B):
+        predictive probability = average predictive probability
+
+    Args:
+        - raw_model_preds: dataframe of raw model predictions with format:
+                                            pred_1    ...       pred_20
+            image
+            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
+            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
+        - num_mc_runs: number of Monte Carlo runs (consider first k predictions per sample)
+
+    Returns:
+        - the mean probability for each sample
+        - the standard deviation around that mean
+    """
     return raw_model_preds.iloc[:,:num_mc_runs].mean(axis=1), raw_model_preds.iloc[:,:num_mc_runs].std(axis=1)
 
 
-
-
 def plot_mean_class_histograms(mean, std, num_mc_runs, nbins, outdir):
+    """
+    Plot histograms of 
+        - the aggregated model predictions (hist_mean_class_mc_X.png)
+        - the uncertainty in those aggregated predictions (hist_std_mean_class_mc_X.png).
+
+    Args:
+        mean: the aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty)
+        std: the standard deviation around that aggregated prediction (from compute_mean_{class/prob}_and_uncertainty)
+        num_mc_runs: the number of Monte Carlo runs (how many predictions per sample)
+        nbins: number of bins for the histograms
+        outdir: output directory for the plots 
+    
+    """
+
     # plot histogram of mean-class predictions
     plt.hist(mean, bins=nbins)
     plt.xlabel('Mean Class Prediction')
@@ -134,6 +106,21 @@ def plot_mean_class_histograms(mean, std, num_mc_runs, nbins, outdir):
     plt.clf()
 
 def plot_predictive_uncertainty_per_bin(mean, std, num_mc_runs, nbins, outdir):
+    """
+    Sanity check:
+    Plot the *average* standard deviation within different bins of the *aggregated* model predictions 
+    (from compute_mean_{class/prob}_and_uncertainty) and the standard deviation around that average.
+
+    We should (by construction) see a concave curve (high standard deviation where the aggregated model 
+    prediction is close to 0.5, low standard deviation at 0 or 1).
+
+    Args:
+        mean: the aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty)
+        std: the standard deviation around that aggregated prediction (from compute_mean_{class/prob}_and_uncertainty)
+        num_mc_runs: the number of Monte Carlo runs (how many predictions per sample)
+        nbins: number of bins for the histograms
+        outdir: output directory for the plots 
+    """
     # bin the mean-class predictions and calc. average std_dev per bin
     mean_bins = pd.cut(mean, bins=np.linspace(0, 1, nbins+1), include_lowest=True)
     average_std_per_bin = pd.concat([mean, mean_bins, std], axis=1).groupby(1, observed=False).agg({2: 'mean'})
@@ -151,6 +138,23 @@ def plot_predictive_uncertainty_per_bin(mean, std, num_mc_runs, nbins, outdir):
     plt.clf()
 
 def plot_calibration_plot(mean_preds, gt, num_mc_runs, nbins, outdir):
+    """
+    Plot a calibration plot for the model predictions.
+
+    * The x-axis is the (aggregated) model prediction for each sample, binned into nbins.
+    * The y-axis is the average ground-truth positive class frequency in each bin.
+
+    A well-calibrated model should closely follow the identity line (y=x), i.e.
+    if the model verdict is that an image contains artefacts with probability p, then
+    a fraction p of so-labelled images should indeed contain artefacts (no more, no fewer).
+
+    Args:
+        mean_preds: the aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty)
+        gt: the ground-truth labels for each sample
+        num_mc_runs: the number of Monte Carlo runs (how many predictions per sample)
+        nbins: number of bins for the histograms
+        outdir: output directory for the plots
+    """
     mean_preds_bins = pd.cut(mean_preds, bins=np.linspace(0, 1, nbins+1), include_lowest=True)    
     preds_and_bins = pd.concat([mean_preds, mean_preds_bins], axis=1)
     merged = pd.merge(preds_and_bins,  gt['bin_gt'], 
@@ -170,6 +174,20 @@ def plot_calibration_plot(mean_preds, gt, num_mc_runs, nbins, outdir):
     plt.clf()
 
 def merge_predictions_and_gt(mean, std, ground_truth_labels):
+    """
+    Merge aggregated model predictions and their uncertainties with ground-truth 
+    labels into a single dataframe.
+    Prediction uncertainties are re-scaled to lie between 0 and 1.
+
+    Args:
+        - mean: the aggregated model predictions
+        - std: the standard deviation around that mean
+        - ground_truth_labels: dataframe of ground-truth labels with format:
+                                            bin_gt
+            image
+            sub-926536_acq-headmotion1_T1w  1
+            sub-926536_acq-standard_T1w     0
+    """
     # re-scale std to lie between 0 and 1
     scaled_std = (std - np.min(std)) / (np.max(std) - np.min(std))
     # merge mean-class predictions and uncertainties with ground-truth labels (left join)
@@ -180,6 +198,23 @@ def merge_predictions_and_gt(mean, std, ground_truth_labels):
     return merged
 
 def calculate_DFFMR_AP_AUROC(merged, eta):
+    """
+    Calculate *binary* classification metrics when classifying images based on
+    the aggregated model predictions and their uncertainties.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual review,
+    the rest are classified as 'clean' or 'artefact' based on a single probability threshold.
+
+    Computes:
+        - DFFMR: Dataset Fraction Flagged For Manual Review
+        - AP: Average Precision (AUPRC)
+        - AUROC: Area Under the ROC Curve
+    
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - eta: uncertainty threshold for flagging images for manual review
+    """ 
+
     # fraction of Dataset Flagged For Manual Review (DFFMR)
     num_images = merged.shape[0]
     num_discarded = sum(merged['scaled_std_pred'] >= eta)
@@ -200,6 +235,31 @@ def calculate_DFFMR_AP_AUROC(merged, eta):
     return DFFMR, AP, AUC
 
 def plot_DFFMR_AP_AUROC(merged, num_mc_runs, maxDFFMR, OUTDIR):
+    """
+    Plot *binary* classification metrics when classifying images based on 
+    the aggregated model predictions and their uncertainties.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual 
+    review. The rest are classified as 'clean' or 'artefact' based on a single 
+    probability threshold. We compute and plot metrics for a grid of eta values, find 
+    the eta that achieves a desired maximal DFFMR, and return it.
+
+    Computes and plots (against eta):
+        - DFFMR: dataset fraction flagged for manual review
+        - AP: average precision (AUPRC)
+        - AUROC: area under the ROC curve
+    
+    Minimum eta is marked in red on plot.
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - num_mc_runs: number of Monte Carlo runs (how many predictions per sample)
+        - maxDFFMR: maximum acceptable DFFMR
+        - OUTDIR: output directory for the plots
+
+    Returns:
+        - the minimum eta that achieves a DFFMR <= maxDFFMR
+    """
     etas = np.linspace(0, 1, 100)
     DFFMR_AP = pd.DataFrame([calculate_DFFMR_AP_AUROC(merged, eta) for eta in etas])
     DFFMR_AP.columns = ['DFFMR', 'AP', 'AUROC']
@@ -233,6 +293,26 @@ def pointwise_metrics(retained, theta):
     return F1, precision, recall, accuracy, specificity
 
 def calculate_gridpoint_metrics(merged, eta, theta):
+    """
+    Calculate metrics for a gridpoint in the eta-theta space.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual review,
+    the rest are classified as 'clean' or 'artefact' based on a single probability 
+    threshold, theta, on the aggregated model predictions.
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - eta: uncertainty threshold for flagging images for manual review (float)
+        - theta: probability threshold for class assignment (float)
+
+    Returns:
+        - DFFMR: Dataset Fraction Flagged For Manual Review
+        - UDM: Unusable Dataset Missed (FN)
+        - UDD: Usable Dataset Discarded (FP)
+        - F1, precision, recall, accuracy, specificity
+        - a combined score that trades off these various metrics
+
+    """
     # TODO: check if sensible and accurately implemented - amend as appropriate
     # TODO: re-define combined score
 
@@ -264,6 +344,30 @@ def calculate_gridpoint_metrics(merged, eta, theta):
         return combined_score, DFFMR, UDM, F1, precision, recall, accuracy, specificity, UDD
 
 def gridpoint_metrics_tensor(merged, min_eta, lattice_size=50):
+    """
+    Calculate metrics for a lattice of gridpoints in the eta-theta space.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual review,
+    the rest are classified as 'clean' or 'artefact' based on a single probability 
+    threshold, theta, on the aggregated model predictions.
+    
+    This function computes the following metrics for a lattice of gridpoints in 
+    the eta-theta space:
+        - DFFMR: dataset fraction flagged for manual review
+        - UDM: unusable dataset missed (FN)
+        - UDD: usable dataset discarded (FP)
+        - F1, precision, recall, accuracy, specificity
+        - a combined score that trades off these various metrics
+    Prints the optimal gridpoint that minimises the combined score.
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - min_eta: minimum uncertainty threshold that ensures a desired maximal DFFMR (see plot_DFFMR_AP_AUROC)
+        - lattice_size: number of gridpoints for theta (no for eta is proportional)
+    
+    Returns:
+        - a dataframe of metrics for each gridpoint in the eta-theta space
+    """
     etas = np.linspace(min_eta, 1, math.ceil(lattice_size * (1-min_eta)))
     thetas = np.linspace(0, 1, lattice_size)
     print('Running over eta grid:')
@@ -278,6 +382,22 @@ def gridpoint_metrics_tensor(merged, min_eta, lattice_size=50):
     return gridpoint_metrics
 
 def plot_gridpoint_metrics(gpm_tensor, maxDFFMR, num_mc_runs, OUTDIR):
+    """
+    Plots pre-computed metrics for each gridpoint in the eta-theta space.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual review,
+    the rest are classified as 'clean' or 'artefact' based on a single probability
+    threshold, theta, on the aggregated model predictions.
+
+    Plots:
+        - a heatmap of each metric in the eta-theta space in areas where DFFMR < maxDFFMR
+
+    Args:
+        - gpm_tensor: dataframe of metrics for each gridpoint in the eta-theta space (from gridpoint_metrics_tensor)
+        - maxDFFMR: maximum acceptable DFFMR
+        - num_mc_runs: number of Monte Carlo runs (how many predictions per sample)
+        - OUTDIR: output directory for the plots
+    """
     # os.makedirs(OUTDIR+'/grids', exist_ok=True)
     gridpoint_metrics = gpm_tensor[gpm_tensor['DFFMR'] < maxDFFMR].reset_index()
 
@@ -301,6 +421,27 @@ def plot_gridpoint_metrics(gpm_tensor, maxDFFMR, num_mc_runs, OUTDIR):
         plt.close()
 
 def one_stage_screening(merged, OUTDIR='analysis_A_out'):
+    """
+    Plot *binary* classification metrics when classifying images based only on 
+    the aggregated model predictions (ignoring the associated uncertainties; i.e. eta=1).
+    
+    Images are classified as either 'clean' or 'artefact' based on a 
+    single probability threshold.
+
+    Computes and plots:
+        - DFFMR: dataset fraction flagged for manual review (should be 0 always)
+        - AP: average precision (AUPRC)
+        - AUROC: area under the ROC curve
+        - UDM: unusable dataset missed (FN)
+        - UDD: usable dataset discarded (FP)
+        - F1, accuracy, specificity
+        - a combined score that trades off these various metrics
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - OUTDIR: output directory for the plots 
+    """
+
     os.makedirs(OUTDIR, exist_ok=True)
     # single-number stats
     DFFMR, AP, AUC = calculate_DFFMR_AP_AUROC(merged, eta=1.1) # don't exclude any images
@@ -334,6 +475,28 @@ def one_stage_screening(merged, OUTDIR='analysis_A_out'):
     plt.clf()
 
 def two_stage_screening(merged, MC=20, maxDFFMR=0.3, lattice_size=50, OUTDIR='analysis_A_out'):
+    """
+    Plot *binary* classification metrics when classifying images based on the aggregated model
+    predictions and their uncertainties.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual review,
+    the rest are classified as 'clean' or 'artefact' based on a single probability threshold, theta.
+   
+    For a grid of thresholds in the eta-theta space, computes and plots:
+        - DFFMR: dataset fraction flagged for manual review
+        - UDM: unusable dataset missed (FN)
+        - UDD: usable dataset discarded (FP)
+        - F1, precision, recall, accuracy, specificity
+        - a combined score that trades off these various metrics
+    
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - MC: number of Monte Carlo runs (how many predictions per sample)
+        - maxDFFMR: maximum acceptable DFFMR
+        - lattice_size: number of gridpoints for theta (no for eta is proportional)
+        - OUTDIR: output directory for the plots
+    """
+
     os.makedirs(OUTDIR, exist_ok=True)
     # eta-dependent stats
     min_eta = plot_DFFMR_AP_AUROC(merged, MC, maxDFFMR, OUTDIR) # min_eta to ensure DFFMR <= maxDFFMR
@@ -342,6 +505,32 @@ def two_stage_screening(merged, MC=20, maxDFFMR=0.3, lattice_size=50, OUTDIR='an
     plot_gridpoint_metrics(gpm_tensor, maxDFFMR, MC, OUTDIR+'/two_stage_screening')
 
 def run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, option='mean_class', OUTDIR='analysis_A_out', init_thresh=0.5):
+    """
+    Basic analysis pipeline for model predictions on a test set with known labels.
+    Aggregates model predictions into a single estimate mu and its uncertainty sigma, per sample.
+    Plots 
+        - histograms of mu and sigma, 
+        - a sanity check of uncertainty per bin of mu,
+        - a model calibration plot,
+    then merges the predictions with ground-truth labels for further analysis.
+
+    Args:
+        - raw_model_preds: dataframe of raw model predictions with format:
+                                            pred_1    ...       pred_20
+            image
+            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
+            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
+        - ground_truth_labels: dataframe of ground-truth labels with format:
+                                            bin_gt
+            image
+            sub-926536_acq-headmotion1_T1w  1
+            sub-926536_acq-standard_T1w     0
+        - MC: number of Monte Carlo runs (how many predictions per sample)
+        - nbins: number of bins for the histograms
+        - option: how to aggregate model predictions (mean_class or mean_prob)
+        - OUTDIR: output directory for the plots
+        - init_thresh: initial threshold for class assignment
+    """
     # setup
     os.makedirs(OUTDIR, exist_ok=True)
     # analysis
@@ -361,6 +550,18 @@ def run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10,
     return merged
 
 def run_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, maxDFFMR=0.3, lattice_size=50, option='mean_class', OUTDIR='analysis_A_out', init_thresh=0.5):
+    """
+    Full *binary* analysis pipeline for model predictions on a test set with known labels.
+
+    Aggregates model predictions into a single estimate mu and its uncertainty sigma, per sample.
+    Then computes metrics and plots results for 
+        - one-stage screening (probability threshold only)
+        - two-stage screening (uncertainty and probability thresholds).
+
+    In both cases the classification of images is binary, into 'clean' or 'artefact', but in the
+    second case images with high prediction uncertainty sigma > eta are flagged for manual review
+    and removed from the pool before classification.
+    """
     merged = run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC, nbins, option, OUTDIR, init_thresh)
     # one-stage screening (probability threshold only)
     one_stage_screening(merged, OUTDIR=OUTDIR+'/one_stage_screening')
@@ -368,17 +569,62 @@ def run_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, maxDFFMR
     two_stage_screening(merged, MC, maxDFFMR, lattice_size, OUTDIR=OUTDIR+'/two_stage_screening')
 
 def split_by_uncertainty(merged, eta):
+    """
+    Split the predictions dataframe into two subsets based on the uncertainty threshold eta.
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - eta: uncertainty threshold for flagging images for manual review
+
+    Returns:
+        - unc_pass: subset of merged with uncertainty <= eta (model is confident in its prediction of probability)
+        - unc_fail: subset of merged with uncertainty > eta (model is uncertain)
+    """
     unc_pass = merged[merged['scaled_std_pred'] <= eta]
     unc_fail = merged[merged['scaled_std_pred'] > eta]
     return unc_pass, unc_fail
 
 def split_by_prob(unc_pass, lower, upper):
+    """
+    Split the predictions dataframe into three subsets based on the probability thresholds lower and upper.
+
+    Args:
+        - unc_pass: set of predictions where model is confident in its prediction of probability 
+            (from split_by_uncertainty)
+        - lower: lower probability threshold for class assignment
+        - upper: upper probability threshold for class assignment
+
+    Returns:
+        - def_clean: subset of unc_pass with mean_pred < lower (model is confident in its prediction of 'clean')
+        - prob_fail: subset of unc_pass with lower <= mean_pred <= upper (model-predicted probability is intermediate (but certain))
+        - def_dirty: subset of unc_pass with mean_pred > upper (model is confident in its prediction of 'dirty')
+    """
     def_clean = unc_pass[unc_pass['mean_pred'] < lower]
     def_dirty = unc_pass[unc_pass['mean_pred'] > upper]
     prob_fail = unc_pass[(unc_pass['mean_pred'] >= lower) & (unc_pass['mean_pred'] <= upper)]
     return def_clean, prob_fail, def_dirty
 
 def ternary_split(merged, eta, theta, tau):
+    """
+    Split the predictions dataframe into three subsets based on the uncertainty and probability thresholds.
+
+    Images with high prediction uncertainty sigma > eta are flagged for manual review,
+    the rest are classified into 'clean', 'artefact', or 'for_review' based on two probability thresholds.
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - eta: uncertainty threshold for flagging images for manual review
+        - theta: lower probability threshold for clean class assignment
+        - tau: upper probability threshold for artefact class assignment
+
+    Returns:
+        - def_clean: predictions where sigma <= eta and mean_pred < theta (classified as clean)
+        - def_dirty: predictions where sigma <= eta and mean_pred > tau (classified as artefacts)
+        - unc_fail: predictions where sigma > eta (flagged for manual review due to model uncertainty)
+        - prob_fail: predictions where theta <= mean_pred <= tau (flagged for manual review due to model 
+            being certain in intermediate probability assignment)
+        - for_review: combination of previous two (total set flagged for manual review)
+    """
     # split into 3 subsets: clean, dirty, for_review
     # also return for_review split by review reason
     unc_pass, unc_fail = split_by_uncertainty(merged, eta)
@@ -388,6 +634,25 @@ def ternary_split(merged, eta, theta, tau):
     return def_clean, def_dirty, for_review, unc_fail, prob_fail
 
 def ternary_metrics(def_clean, def_dirty, for_review, unc_fail):
+    """
+    Calculate performance metrics for a pre-computed ternary split of a test set into clean, 
+    artefact, and for_review subsets.
+
+    Computes:
+        - size_clean: number of labelled-clean images
+        - impurity_clean: fraction of labelled-clean images that are artefacts (FN rate)
+        - size_dirty: number of labelled-artefact images
+        - impurity_dirty: fraction of labelled-artefact images that are clean (FP rate)
+        - wrkld_reduction: fraction of images that are not flagged for manual review
+        - size_for_rev: number of images flagged for manual review
+        - frac_dffmred_because_uncertain: fraction of images flagged for manual review due to model uncertainty
+
+    Args:
+        - def_clean: subset of merged with mean_pred < theta (model is confident in its prediction of 'clean')
+        - def_dirty: subset of merged with mean_pred > tau (model is confident in its prediction of 'dirty')
+        - for_review: subset of merged with theta <= mean_pred <= tau (model-predicted probability is intermediate (but certain))
+        - unc_fail: subset of merged with uncertainty > eta (model is uncertain)
+    """
     size_clean, size_dirty, size_for_rev = def_clean.shape[0], def_dirty.shape[0], for_review.shape[0]
     impurity_clean = def_clean['bin_gt'].mean() if def_clean.shape[0] > 0 else 0
     impurity_dirty = def_dirty['bin_gt'].mean() if def_dirty.shape[0] > 0 else 0
@@ -397,6 +662,27 @@ def ternary_metrics(def_clean, def_dirty, for_review, unc_fail):
     return size_clean, impurity_clean, size_dirty, impurity_dirty, 1-dffmr, size_for_rev, frac_dffmred_because_uncertain
 
 def ternary_gridpoint_metrics(merged, lattice_size=50):
+    """
+    Calculate performance metrics for a grid of eta, theta, tau values.
+
+    At each grid-point, split testset into clean, artefact, and for_review subsets 
+    using thresholds eta, theta, tau and the aggregated model prediction. 
+    Then calculates for that choice of thresholds:
+        - size_clean: number of labelled-clean images
+        - impurity_clean: fraction of labelled-clean images that are artefacts (FN rate)
+        - size_dirty: number of labelled-artefact images
+        - impurity_dirty: fraction of labelled-artefact images that are clean (FP rate)
+        - wrkld_reduction: fraction of images that are not flagged for manual review
+        - size_for_rev: number of images flagged for manual review
+        - frac_dffmred_because_uncertain: fraction of images flagged for manual review due to model uncertainty
+
+    Args:
+        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
+        - lattice_size: number of gridpoints for eta, theta, tau
+
+    Returns:
+        - a dataframe of metrics for each gridpoint in the eta-theta-tau space
+    """
     etas = np.linspace(0, 1, lattice_size)
     thetas = np.linspace(0, 1, lattice_size)
     taus_full = np.linspace(0, 1, lattice_size)
