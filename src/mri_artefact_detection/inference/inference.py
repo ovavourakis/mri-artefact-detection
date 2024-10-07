@@ -3,7 +3,20 @@ import tensorflow as tf
 from keras.metrics import AUC
 from ..training.train_utils import DataLoader
 
-def run_model_inference(savedir, weights, gt_data, mc_runs):
+def run_model_inference(savedir: str, weights: str, gt_data: str, mc_runs: int) -> None:
+    """
+    Runs model inference on a test dataset and gives simple performance metrics.
+
+    :param savedir: Directory where inference outputs will be saved.
+    :type savedir: str
+    :param weights: Path to the model weights file.
+    :type weights: str
+    :param gt_data: Path to the ground truth data file.
+    :type gt_data: str
+    :param mc_runs: Number of Monte Carlo runs for inference.
+    :type mc_runs: int
+    :return: None
+    """
     # ENABLE GPU IF PRESENT
     physical_devices = tf.config.list_physical_devices('GPU')
     if len(physical_devices) > 0:

@@ -8,20 +8,20 @@ from keras.models import Model
 from keras.layers import Dense, Dropout, Activation, Flatten, BatchNormalization
 from keras.layers import Conv3D, MaxPooling3D, Input
 
-def getConvNet(out_classes=2, input_shape=(192,256,256,1)):
-    '''
+def getConvNet(out_classes: int = 2, input_shape: tuple = (192, 256, 256, 1)) -> Model:
+    """
     Convolutional Bayesian Neural Net classifier architecture.
-    
-    Args:
-        input_shape: tuple of image (depth, height, width, num_channels)
-        out_classes: final layer size; if 2, then {firt:clean, second:artefact}
 
-    Returns:
-        Model: uncompiled keras model
+    :param tuple input_shape: Tuple of image (depth, height, width, num_channels).
+    :param int out_classes: Final layer size; if 2, then {first: clean, second: artefact}.
 
-    Note: 
-        The compiled model can also be given a tensor of dimension (batch_size, depth, height, width, num_channels).
-    '''
+    :returns: Uncompiled keras model.
+    :rtype: Model
+
+    .. note::
+        The compiled model can also be given a tensor of dimension 
+        (batch_size, depth, height, width, num_channels).
+    """
     inp = Input(input_shape) # depth x witdth x height x channels
 
     # 192 x 256 x 256 x 1

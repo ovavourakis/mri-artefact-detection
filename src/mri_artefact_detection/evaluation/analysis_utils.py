@@ -1,21 +1,23 @@
 import os, math, pandas as pd, numpy as np, matplotlib.pyplot as plt, seaborn as sns
 from sklearn.metrics import average_precision_score, roc_auc_score, f1_score, precision_score, recall_score, confusion_matrix
 from tqdm import tqdm
+from typing import Tuple, Union
 
-def load_predictions_and_ground_truth(MODEL_PREDS):
+def load_predictions_and_ground_truth(MODEL_PREDS: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Read out test set predictions and ground-truth labels from a tab-separated file 
-    with the following format
+    with the following format::
 
-            image                           bin_gt      pred_1    ...       pred_20
-            sub-926536_acq-headmotion1_T1w  1           0.433381  ...  5.049924e-01
-            sub-926536_acq-standard_T1w     0           0.003448  ...  6.611057e-02
+        image                           bin_gt      pred_1    ...       pred_20
+        sub-926536_acq-headmotion1_T1w  1           0.433381  ...  5.049924e-01
+        sub-926536_acq-standard_T1w     0           0.003448  ...  6.611057e-02
 
     and split them into separate dataframes.
 
-    Args:
-        MODEL_PREDS: path to the tab-separated file
-            
+    :param MODEL_PREDS: Path to the tab-separated file.
+    :type MODEL_PREDS: str
+    :returns: A tuple containing the ground truth labels and model predictions as dataframes.
+    :rtype: Tuple[pd.DataFrame, pd.DataFrame]
     """
     model_preds = pd.read_csv(MODEL_PREDS, sep='\t')
     model_preds.rename(columns={'image': 'id'}, inplace=True)
@@ -24,71 +26,75 @@ def load_predictions_and_ground_truth(MODEL_PREDS):
     model_preds.drop(columns=['bin_gt'], inplace=True)
     return ground_truth_labels, model_preds
 
-def assign_class(raw_prob, thresh=0.5):
+def assign_class(raw_prob: float, thresh: float = 0.5) -> int:
     """
     Binarises a value based on a threshold (0 if below, 1 if above).
     Used to convert raw model probabilities to predicted classes (clean/artefact).
+
+    :param raw_prob: The raw probability value.
+    :type raw_prob: float
+    :param thresh: The threshold for binarization, defaults to 0.5.
+    :type thresh: float, optional
+    :returns: The binarized class (0 or 1).
+    :rtype: int
     """
     return 1 if raw_prob >= thresh else 0
 
-def compute_mean_class_and_uncertainty(raw_model_preds, num_mc_runs=20, thresh=0.5):
+def compute_mean_class_and_uncertainty(raw_model_preds: pd.DataFrame, num_mc_runs: int = 20, thresh: float = 0.5) -> Tuple[pd.Series, pd.Series]:
     """
-    Aggregate model predictions on each sample into single predictive probability
-    via OPTION (A):
-        predictive probability = average predicted class
+    Aggregate model predictions on each sample into a single predictive probability
+    via OPTION (A): predictive probability = average predicted class.
 
-    Args:
-        - raw_model_preds: dataframe of raw model predictions with format:
-                                            pred_1    ...       pred_20
-            image
-            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
-            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
-        - num_mc_runs: number of Monte Carlo runs (consider first k predictions per sample)
-        - thresh: threshold for class assignment
-
-    Returns:
-        - the mean class for each sample
-        - the standard deviation around that mean.
+    :param raw_model_preds: Dataframe of raw model predictions with format:
+                            pred_1    ...       pred_20
+                            image
+                            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
+                            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
+    :type raw_model_preds: pd.DataFrame
+    :param num_mc_runs: Number of Monte Carlo runs (consider first k predictions per sample).
+    :type num_mc_runs: int
+    :param thresh: Threshold for class assignment.
+    :type thresh: float
+    :returns: The mean class for each sample and the standard deviation around that mean.
+    :rtype: Tuple[pd.Series, pd.Series]
     """
     model_assigned_classes = raw_model_preds.iloc[:, :num_mc_runs].apply(lambda x: x.map(lambda y: assign_class(y, thresh=thresh)))
     return model_assigned_classes.mean(axis=1), model_assigned_classes.std(axis=1)
 
-def compute_mean_prob_and_uncertainty(raw_model_preds, num_mc_runs=20):
+def compute_mean_prob_and_uncertainty(raw_model_preds: pd.DataFrame, num_mc_runs: int = 20) -> Tuple[pd.Series, pd.Series]:
     """
-    Aggregate model predictions on each sample into single predictive probability
-    via OPTION (B):
-        predictive probability = average predictive probability
+    Aggregate model predictions on each sample into a single predictive probability
+    via OPTION (B): predictive probability = average predictive probability.
 
-    Args:
-        - raw_model_preds: dataframe of raw model predictions with format:
-                                            pred_1    ...       pred_20
-            image
-            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
-            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
-        - num_mc_runs: number of Monte Carlo runs (consider first k predictions per sample)
-
-    Returns:
-        - the mean probability for each sample
-        - the standard deviation around that mean
+    :param raw_model_preds: Dataframe of raw model predictions with format:
+                            pred_1    ...       pred_20
+                            image
+                            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
+                            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
+    :type raw_model_preds: pd.DataFrame
+    :param num_mc_runs: Number of Monte Carlo runs (consider first k predictions per sample).
+    :type num_mc_runs: int
+    :returns: The mean probability for each sample and the standard deviation around that mean.
+    :rtype: Tuple[pd.Series, pd.Series]
     """
     return raw_model_preds.iloc[:,:num_mc_runs].mean(axis=1), raw_model_preds.iloc[:,:num_mc_runs].std(axis=1)
 
 
-def plot_mean_class_histograms(mean, std, num_mc_runs, nbins, outdir):
+def plot_mean_class_histograms(mean: pd.Series, std: pd.Series, num_mc_runs: int, nbins: int, outdir: str) -> None:
     """
-    Plot histograms of 
-        - the aggregated model predictions (hist_mean_class_mc_X.png)
-        - the uncertainty in those aggregated predictions (hist_std_mean_class_mc_X.png).
+    Plot histograms of the aggregated model predictions and the uncertainty in those aggregated predictions.
 
-    Args:
-        mean: the aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty)
-        std: the standard deviation around that aggregated prediction (from compute_mean_{class/prob}_and_uncertainty)
-        num_mc_runs: the number of Monte Carlo runs (how many predictions per sample)
-        nbins: number of bins for the histograms
-        outdir: output directory for the plots 
-    
+    :param mean: The aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty).
+    :type mean: pd.Series
+    :param std: The standard deviation around that aggregated prediction (from compute_mean_{class/prob}_and_uncertainty).
+    :type std: pd.Series
+    :param num_mc_runs: The number of Monte Carlo runs (how many predictions per sample).
+    :type num_mc_runs: int
+    :param nbins: Number of bins for the histograms.
+    :type nbins: int
+    :param outdir: Output directory for the plots.
+    :type outdir: str
     """
-
     # plot histogram of mean-class predictions
     plt.hist(mean, bins=nbins)
     plt.xlabel('Mean Class Prediction')
@@ -105,21 +111,24 @@ def plot_mean_class_histograms(mean, std, num_mc_runs, nbins, outdir):
     plt.savefig(outdir+f'/hist_std_mean_class_mc_{num_mc_runs}.png')
     plt.clf()
 
-def plot_predictive_uncertainty_per_bin(mean, std, num_mc_runs, nbins, outdir):
+def plot_predictive_uncertainty_per_bin(mean: pd.Series, std: pd.Series, num_mc_runs: int, nbins: int, outdir: str) -> None:
     """
-    Sanity check:
-    Plot the *average* standard deviation within different bins of the *aggregated* model predictions 
-    (from compute_mean_{class/prob}_and_uncertainty) and the standard deviation around that average.
+    Sanity check: Plot the average standard deviation within different bins of the aggregated model predictions 
+    and the standard deviation around that average.
 
     We should (by construction) see a concave curve (high standard deviation where the aggregated model 
     prediction is close to 0.5, low standard deviation at 0 or 1).
 
-    Args:
-        mean: the aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty)
-        std: the standard deviation around that aggregated prediction (from compute_mean_{class/prob}_and_uncertainty)
-        num_mc_runs: the number of Monte Carlo runs (how many predictions per sample)
-        nbins: number of bins for the histograms
-        outdir: output directory for the plots 
+    :param mean: The aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty).
+    :type mean: pd.Series
+    :param std: The standard deviation around that aggregated prediction (from compute_mean_{class/prob}_and_uncertainty).
+    :type std: pd.Series
+    :param num_mc_runs: The number of Monte Carlo runs (how many predictions per sample).
+    :type num_mc_runs: int
+    :param nbins: Number of bins for the histograms.
+    :type nbins: int
+    :param outdir: Output directory for the plots.
+    :type outdir: str
     """
     # bin the mean-class predictions and calc. average std_dev per bin
     mean_bins = pd.cut(mean, bins=np.linspace(0, 1, nbins+1), include_lowest=True)
@@ -137,23 +146,27 @@ def plot_predictive_uncertainty_per_bin(mean, std, num_mc_runs, nbins, outdir):
     plt.savefig(outdir+f'/line_std_per_bin_mc_{num_mc_runs}.png')
     plt.clf()
 
-def plot_calibration_plot(mean_preds, gt, num_mc_runs, nbins, outdir):
+def plot_calibration_plot(mean_preds: pd.Series, gt: pd.DataFrame, num_mc_runs: int, nbins: int, outdir: str) -> None:
     """
     Plot a calibration plot for the model predictions.
 
-    * The x-axis is the (aggregated) model prediction for each sample, binned into nbins.
-    * The y-axis is the average ground-truth positive class frequency in each bin.
+    The x-axis is the (aggregated) model prediction for each sample, binned into nbins.
+    The y-axis is the average ground-truth positive class frequency in each bin.
 
     A well-calibrated model should closely follow the identity line (y=x), i.e.
     if the model verdict is that an image contains artefacts with probability p, then
     a fraction p of so-labelled images should indeed contain artefacts (no more, no fewer).
 
-    Args:
-        mean_preds: the aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty)
-        gt: the ground-truth labels for each sample
-        num_mc_runs: the number of Monte Carlo runs (how many predictions per sample)
-        nbins: number of bins for the histograms
-        outdir: output directory for the plots
+    :param mean_preds: The aggregated model predictions for each sample (from compute_mean_{class/prob}_and_uncertainty).
+    :type mean_preds: pd.Series
+    :param gt: The ground-truth labels for each sample.
+    :type gt: pd.DataFrame
+    :param num_mc_runs: The number of Monte Carlo runs (how many predictions per sample).
+    :type num_mc_runs: int
+    :param nbins: Number of bins for the histograms.
+    :type nbins: int
+    :param outdir: Output directory for the plots.
+    :type outdir: str
     """
     mean_preds_bins = pd.cut(mean_preds, bins=np.linspace(0, 1, nbins+1), include_lowest=True)    
     preds_and_bins = pd.concat([mean_preds, mean_preds_bins], axis=1)
@@ -173,20 +186,23 @@ def plot_calibration_plot(mean_preds, gt, num_mc_runs, nbins, outdir):
     plt.savefig(outdir+f'/calibration_plot_mc_{num_mc_runs}.png')
     plt.clf()
 
-def merge_predictions_and_gt(mean, std, ground_truth_labels):
+def merge_predictions_and_gt(mean: pd.Series, std: pd.Series, ground_truth_labels: pd.DataFrame) -> pd.DataFrame:
     """
     Merge aggregated model predictions and their uncertainties with ground-truth 
-    labels into a single dataframe.
-    Prediction uncertainties are re-scaled to lie between 0 and 1.
+    labels into a single dataframe. Prediction uncertainties are re-scaled to lie between 0 and 1.
 
-    Args:
-        - mean: the aggregated model predictions
-        - std: the standard deviation around that mean
-        - ground_truth_labels: dataframe of ground-truth labels with format:
-                                            bin_gt
-            image
-            sub-926536_acq-headmotion1_T1w  1
-            sub-926536_acq-standard_T1w     0
+    :param mean: The aggregated model predictions.
+    :type mean: pd.Series
+    :param std: The standard deviation around that mean.
+    :type std: pd.Series
+    :param ground_truth_labels: Dataframe of ground-truth labels with format:
+                                bin_gt
+                                image
+                                sub-926536_acq-headmotion1_T1w  1
+                                sub-926536_acq-standard_T1w     0
+    :type ground_truth_labels: pd.DataFrame
+    :returns: A dataframe with merged predictions and ground-truth labels.
+    :rtype: pd.DataFrame
     """
     # re-scale std to lie between 0 and 1
     scaled_std = (std - np.min(std)) / (np.max(std) - np.min(std))
@@ -197,9 +213,9 @@ def merge_predictions_and_gt(mean, std, ground_truth_labels):
                         left_index=True, right_index=True)
     return merged
 
-def calculate_DFFMR_AP_AUROC(merged, eta):
+def calculate_DFFMR_AP_AUROC(merged: pd.DataFrame, eta: float) -> Tuple[float, Union[float, None], Union[float, None]]:
     """
-    Calculate *binary* classification metrics when classifying images based on
+    Calculate binary classification metrics when classifying images based on
     the aggregated model predictions and their uncertainties.
 
     Images with high prediction uncertainty sigma > eta are flagged for manual review,
@@ -210,9 +226,12 @@ def calculate_DFFMR_AP_AUROC(merged, eta):
         - AP: Average Precision (AUPRC)
         - AUROC: Area Under the ROC Curve
     
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - eta: uncertainty threshold for flagging images for manual review
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param eta: Uncertainty threshold for flagging images for manual review.
+    :type eta: float
+    :returns: A tuple containing DFFMR, AP, and AUROC.
+    :rtype: Tuple[float, Union[float, None], Union[float, None]]
     """ 
 
     # fraction of Dataset Flagged For Manual Review (DFFMR)
@@ -234,9 +253,9 @@ def calculate_DFFMR_AP_AUROC(merged, eta):
 
     return DFFMR, AP, AUC
 
-def plot_DFFMR_AP_AUROC(merged, num_mc_runs, maxDFFMR, OUTDIR):
+def plot_DFFMR_AP_AUROC(merged: pd.DataFrame, num_mc_runs: int, maxDFFMR: float, OUTDIR: str) -> float:
     """
-    Plot *binary* classification metrics when classifying images based on 
+    Plot binary classification metrics when classifying images based on 
     the aggregated model predictions and their uncertainties.
 
     Images with high prediction uncertainty sigma > eta are flagged for manual 
@@ -245,20 +264,22 @@ def plot_DFFMR_AP_AUROC(merged, num_mc_runs, maxDFFMR, OUTDIR):
     the eta that achieves a desired maximal DFFMR, and return it.
 
     Computes and plots (against eta):
-        - DFFMR: dataset fraction flagged for manual review
-        - AP: average precision (AUPRC)
-        - AUROC: area under the ROC curve
+        - DFFMR: Dataset fraction flagged for manual review
+        - AP: Average precision (AUPRC)
+        - AUROC: Area under the ROC curve
     
     Minimum eta is marked in red on plot.
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - num_mc_runs: number of Monte Carlo runs (how many predictions per sample)
-        - maxDFFMR: maximum acceptable DFFMR
-        - OUTDIR: output directory for the plots
-
-    Returns:
-        - the minimum eta that achieves a DFFMR <= maxDFFMR
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param num_mc_runs: Number of Monte Carlo runs (how many predictions per sample).
+    :type num_mc_runs: int
+    :param maxDFFMR: Maximum acceptable DFFMR.
+    :type maxDFFMR: float
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
+    :returns: The minimum eta that achieves a DFFMR <= maxDFFMR.
+    :rtype: float
     """
     etas = np.linspace(0, 1, 100)
     DFFMR_AP = pd.DataFrame([calculate_DFFMR_AP_AUROC(merged, eta) for eta in etas])
@@ -282,7 +303,23 @@ def plot_DFFMR_AP_AUROC(merged, num_mc_runs, maxDFFMR, OUTDIR):
 
     return min_eta
 
-def pointwise_metrics(retained, theta):
+def pointwise_metrics(retained: pd.DataFrame, theta: float) -> Tuple[float, float, float, float, float]:
+    """
+    Calculate pointwise classification metrics for retained images.
+
+    This function computes several classification metrics based on the 
+    predictions and ground-truth labels of retained images after applying 
+    an uncertainty threshold. The predictions are binarized using a given 
+    probability threshold, theta.
+
+    :param retained: DataFrame containing the retained images' predictions 
+                     and ground-truth labels.
+    :type retained: pd.DataFrame
+    :param theta: Probability threshold for binarizing predictions.
+    :type theta: float
+    :returns: A tuple containing F1 score, precision, recall, accuracy, and specificity of the binarized predictions.
+    :rtype: Tuple[float, float, float, float, float]
+    """
     binarised_preds = retained['mean_pred'] > theta
     tn, fp, fn, tp = confusion_matrix(retained['bin_gt'], binarised_preds).ravel()
     accuracy = (tp+tn)/(tp+tn+fp+fn) if (tp+tn+fp+fn > 0) else np.nan
@@ -292,7 +329,7 @@ def pointwise_metrics(retained, theta):
     recall = recall_score(retained['bin_gt'], binarised_preds, zero_division=np.nan)
     return F1, precision, recall, accuracy, specificity
 
-def calculate_gridpoint_metrics(merged, eta, theta):
+def calculate_gridpoint_metrics(merged: pd.DataFrame, eta: float, theta: float) -> Tuple[Union[float, None], float, Union[float, None], float, float, float, float, float, Union[float, None]]:
     """
     Calculate metrics for a gridpoint in the eta-theta space.
 
@@ -300,18 +337,14 @@ def calculate_gridpoint_metrics(merged, eta, theta):
     the rest are classified as 'clean' or 'artefact' based on a single probability 
     threshold, theta, on the aggregated model predictions.
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - eta: uncertainty threshold for flagging images for manual review (float)
-        - theta: probability threshold for class assignment (float)
-
-    Returns:
-        - DFFMR: Dataset Fraction Flagged For Manual Review
-        - UDM: Unusable Dataset Missed (FN)
-        - UDD: Usable Dataset Discarded (FP)
-        - F1, precision, recall, accuracy, specificity
-        - a combined score that trades off these various metrics
-
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param eta: Uncertainty threshold for flagging images for manual review.
+    :type eta: float
+    :param theta: Probability threshold for class assignment.
+    :type theta: float
+    :returns: A tuple containing combined score, DFFMR, UDM, F1, precision, recall, accuracy, specificity, and UDD.
+    :rtype: Tuple[Union[float, None], float, Union[float, None], float, float, float, float, float, Union[float, None]]
     """
     # TODO: check if sensible and accurately implemented - amend as appropriate
     # TODO: re-define combined score
@@ -343,7 +376,7 @@ def calculate_gridpoint_metrics(merged, eta, theta):
         
         return combined_score, DFFMR, UDM, F1, precision, recall, accuracy, specificity, UDD
 
-def gridpoint_metrics_tensor(merged, min_eta, lattice_size=50):
+def gridpoint_metrics_tensor(merged: pd.DataFrame, min_eta: float, lattice_size: int = 50) -> pd.DataFrame:
     """
     Calculate metrics for a lattice of gridpoints in the eta-theta space.
 
@@ -353,20 +386,21 @@ def gridpoint_metrics_tensor(merged, min_eta, lattice_size=50):
     
     This function computes the following metrics for a lattice of gridpoints in 
     the eta-theta space:
-        - DFFMR: dataset fraction flagged for manual review
-        - UDM: unusable dataset missed (FN)
-        - UDD: usable dataset discarded (FP)
+        - DFFMR: Dataset fraction flagged for manual review
+        - UDM: Unusable dataset missed (FN)
+        - UDD: Usable dataset discarded (FP)
         - F1, precision, recall, accuracy, specificity
-        - a combined score that trades off these various metrics
+        - A combined score that trades off these various metrics
     Prints the optimal gridpoint that minimises the combined score.
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - min_eta: minimum uncertainty threshold that ensures a desired maximal DFFMR (see plot_DFFMR_AP_AUROC)
-        - lattice_size: number of gridpoints for theta (no for eta is proportional)
-    
-    Returns:
-        - a dataframe of metrics for each gridpoint in the eta-theta space
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param min_eta: Minimum uncertainty threshold that ensures a desired maximal DFFMR (see plot_DFFMR_AP_AUROC).
+    :type min_eta: float
+    :param lattice_size: Number of gridpoints for theta (no for eta is proportional).
+    :type lattice_size: int
+    :returns: A dataframe of metrics for each gridpoint in the eta-theta space.
+    :rtype: pd.DataFrame
     """
     etas = np.linspace(min_eta, 1, math.ceil(lattice_size * (1-min_eta)))
     thetas = np.linspace(0, 1, lattice_size)
@@ -381,7 +415,7 @@ def gridpoint_metrics_tensor(merged, min_eta, lattice_size=50):
     
     return gridpoint_metrics
 
-def plot_gridpoint_metrics(gpm_tensor, maxDFFMR, num_mc_runs, OUTDIR):
+def plot_gridpoint_metrics(gpm_tensor: pd.DataFrame, maxDFFMR: float, num_mc_runs: int, OUTDIR: str) -> None:
     """
     Plots pre-computed metrics for each gridpoint in the eta-theta space.
 
@@ -390,13 +424,16 @@ def plot_gridpoint_metrics(gpm_tensor, maxDFFMR, num_mc_runs, OUTDIR):
     threshold, theta, on the aggregated model predictions.
 
     Plots:
-        - a heatmap of each metric in the eta-theta space in areas where DFFMR < maxDFFMR
+        - A heatmap of each metric in the eta-theta space in areas where DFFMR < maxDFFMR
 
-    Args:
-        - gpm_tensor: dataframe of metrics for each gridpoint in the eta-theta space (from gridpoint_metrics_tensor)
-        - maxDFFMR: maximum acceptable DFFMR
-        - num_mc_runs: number of Monte Carlo runs (how many predictions per sample)
-        - OUTDIR: output directory for the plots
+    :param gpm_tensor: Dataframe of metrics for each gridpoint in the eta-theta space (from gridpoint_metrics_tensor).
+    :type gpm_tensor: pd.DataFrame
+    :param maxDFFMR: Maximum acceptable DFFMR.
+    :type maxDFFMR: float
+    :param num_mc_runs: Number of Monte Carlo runs (how many predictions per sample).
+    :type num_mc_runs: int
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
     """
     # os.makedirs(OUTDIR+'/grids', exist_ok=True)
     gridpoint_metrics = gpm_tensor[gpm_tensor['DFFMR'] < maxDFFMR].reset_index()
@@ -420,26 +457,27 @@ def plot_gridpoint_metrics(gpm_tensor, maxDFFMR, num_mc_runs, OUTDIR):
         plt.savefig(OUTDIR+f'gridpoint_{metric}_mc_{num_mc_runs}.png')
         plt.close()
 
-def one_stage_screening(merged, OUTDIR='analysis_A_out'):
+def one_stage_screening(merged: pd.DataFrame, OUTDIR: str = 'analysis_A_out') -> None:
     """
-    Plot *binary* classification metrics when classifying images based only on 
+    Plot binary classification metrics when classifying images based only on 
     the aggregated model predictions (ignoring the associated uncertainties; i.e. eta=1).
     
     Images are classified as either 'clean' or 'artefact' based on a 
     single probability threshold.
 
     Computes and plots:
-        - DFFMR: dataset fraction flagged for manual review (should be 0 always)
-        - AP: average precision (AUPRC)
-        - AUROC: area under the ROC curve
-        - UDM: unusable dataset missed (FN)
-        - UDD: usable dataset discarded (FP)
+        - DFFMR: Dataset fraction flagged for manual review (should be 0 always)
+        - AP: Average precision (AUPRC)
+        - AUROC: Area under the ROC curve
+        - UDM: Unusable dataset missed (FN)
+        - UDD: Usable dataset discarded (FP)
         - F1, accuracy, specificity
-        - a combined score that trades off these various metrics
+        - A combined score that trades off these various metrics
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - OUTDIR: output directory for the plots 
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
     """
 
     os.makedirs(OUTDIR, exist_ok=True)
@@ -474,27 +512,31 @@ def one_stage_screening(merged, OUTDIR='analysis_A_out'):
     plt.savefig(OUTDIR+f'/one_stage_screening.png')
     plt.clf()
 
-def two_stage_screening(merged, MC=20, maxDFFMR=0.3, lattice_size=50, OUTDIR='analysis_A_out'):
+def two_stage_screening(merged: pd.DataFrame, MC: int = 20, maxDFFMR: float = 0.3, lattice_size: int = 50, OUTDIR: str = 'analysis_A_out') -> None:
     """
-    Plot *binary* classification metrics when classifying images based on the aggregated model
+    Plot binary classification metrics when classifying images based on the aggregated model
     predictions and their uncertainties.
 
     Images with high prediction uncertainty sigma > eta are flagged for manual review,
     the rest are classified as 'clean' or 'artefact' based on a single probability threshold, theta.
    
     For a grid of thresholds in the eta-theta space, computes and plots:
-        - DFFMR: dataset fraction flagged for manual review
-        - UDM: unusable dataset missed (FN)
-        - UDD: usable dataset discarded (FP)
+        - DFFMR: Dataset fraction flagged for manual review
+        - UDM: Unusable dataset missed (FN)
+        - UDD: Usable dataset discarded (FP)
         - F1, precision, recall, accuracy, specificity
-        - a combined score that trades off these various metrics
+        - A combined score that trades off these various metrics
     
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - MC: number of Monte Carlo runs (how many predictions per sample)
-        - maxDFFMR: maximum acceptable DFFMR
-        - lattice_size: number of gridpoints for theta (no for eta is proportional)
-        - OUTDIR: output directory for the plots
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param MC: Number of Monte Carlo runs (how many predictions per sample).
+    :type MC: int
+    :param maxDFFMR: Maximum acceptable DFFMR.
+    :type maxDFFMR: float
+    :param lattice_size: Number of gridpoints for theta (no for eta is proportional).
+    :type lattice_size: int
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
     """
 
     os.makedirs(OUTDIR, exist_ok=True)
@@ -504,32 +546,37 @@ def two_stage_screening(merged, MC=20, maxDFFMR=0.3, lattice_size=50, OUTDIR='an
     gpm_tensor = gridpoint_metrics_tensor(merged, min_eta, lattice_size=lattice_size)
     plot_gridpoint_metrics(gpm_tensor, maxDFFMR, MC, OUTDIR+'/two_stage_screening')
 
-def run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, option='mean_class', OUTDIR='analysis_A_out', init_thresh=0.5):
+def run_synoptic_analysis(raw_model_preds: pd.DataFrame, ground_truth_labels: pd.DataFrame, MC: int = 20, nbins: int = 10, option: str = 'mean_class', OUTDIR: str = 'analysis_A_out', init_thresh: float = 0.5) -> pd.DataFrame:
     """
     Basic analysis pipeline for model predictions on a test set with known labels.
     Aggregates model predictions into a single estimate mu and its uncertainty sigma, per sample.
-    Plots 
-        - histograms of mu and sigma, 
-        - a sanity check of uncertainty per bin of mu,
-        - a model calibration plot,
+    Plots histograms of mu and sigma, a sanity check of uncertainty per bin of mu, and a model calibration plot,
     then merges the predictions with ground-truth labels for further analysis.
 
-    Args:
-        - raw_model_preds: dataframe of raw model predictions with format:
-                                            pred_1    ...       pred_20
-            image
-            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
-            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
-        - ground_truth_labels: dataframe of ground-truth labels with format:
-                                            bin_gt
-            image
-            sub-926536_acq-headmotion1_T1w  1
-            sub-926536_acq-standard_T1w     0
-        - MC: number of Monte Carlo runs (how many predictions per sample)
-        - nbins: number of bins for the histograms
-        - option: how to aggregate model predictions (mean_class or mean_prob)
-        - OUTDIR: output directory for the plots
-        - init_thresh: initial threshold for class assignment
+    :param raw_model_preds: Dataframe of raw model predictions with format:
+                            pred_1    ...       pred_20
+                            image
+                            sub-926536_acq-headmotion1_T1w  0.433381  ...  5.049924e-01
+                            sub-926536_acq-standard_T1w     0.003448  ...  6.611057e-02
+    :type raw_model_preds: pd.DataFrame
+    :param ground_truth_labels: Dataframe of ground-truth labels with format:
+                                bin_gt
+                                image
+                                sub-926536_acq-headmotion1_T1w  1
+                                sub-926536_acq-standard_T1w     0
+    :type ground_truth_labels: pd.DataFrame
+    :param MC: Number of Monte Carlo runs (how many predictions per sample).
+    :type MC: int
+    :param nbins: Number of bins for the histograms.
+    :type nbins: int
+    :param option: How to aggregate model predictions (mean_class or mean_prob).
+    :type option: str
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
+    :param init_thresh: Initial threshold for class assignment.
+    :type init_thresh: float
+    :returns: A dataframe with merged predictions and ground-truth labels.
+    :rtype: pd.DataFrame
     """
     # setup
     os.makedirs(OUTDIR, exist_ok=True)
@@ -549,18 +596,36 @@ def run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10,
 
     return merged
 
-def run_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, maxDFFMR=0.3, lattice_size=50, option='mean_class', OUTDIR='analysis_A_out', init_thresh=0.5):
+def run_analysis(raw_model_preds: pd.DataFrame, ground_truth_labels: pd.DataFrame, MC: int = 20, nbins: int = 10, maxDFFMR: float = 0.3, lattice_size: int = 50, option: str = 'mean_class', OUTDIR: str = 'analysis_A_out', init_thresh: float = 0.5) -> None:
     """
-    Full *binary* analysis pipeline for model predictions on a test set with known labels.
+    Full binary analysis pipeline for model predictions on a test set with known labels.
 
     Aggregates model predictions into a single estimate mu and its uncertainty sigma, per sample.
-    Then computes metrics and plots results for 
-        - one-stage screening (probability threshold only)
-        - two-stage screening (uncertainty and probability thresholds).
+    Then computes metrics and plots results for one-stage screening (probability threshold only)
+    and two-stage screening (uncertainty and probability thresholds).
 
     In both cases the classification of images is binary, into 'clean' or 'artefact', but in the
     second case images with high prediction uncertainty sigma > eta are flagged for manual review
     and removed from the pool before classification.
+
+    :param raw_model_preds: Dataframe of raw model predictions.
+    :type raw_model_preds: pd.DataFrame
+    :param ground_truth_labels: Dataframe of ground-truth labels.
+    :type ground_truth_labels: pd.DataFrame
+    :param MC: Number of Monte Carlo runs.
+    :type MC: int
+    :param nbins: Number of bins for the histograms.
+    :type nbins: int
+    :param maxDFFMR: Maximum acceptable DFFMR.
+    :type maxDFFMR: float
+    :param lattice_size: Number of gridpoints for theta.
+    :type lattice_size: int
+    :param option: How to aggregate model predictions.
+    :type option: str
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
+    :param init_thresh: Initial threshold for class assignment.
+    :type init_thresh: float
     """
     merged = run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC, nbins, option, OUTDIR, init_thresh)
     # one-stage screening (probability threshold only)
@@ -568,62 +633,57 @@ def run_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, maxDFFMR
     # two-stage screening (uncertainty and probability thresholds)
     two_stage_screening(merged, MC, maxDFFMR, lattice_size, OUTDIR=OUTDIR+'/two_stage_screening')
 
-def split_by_uncertainty(merged, eta):
+def split_by_uncertainty(merged: pd.DataFrame, eta: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split the predictions dataframe into two subsets based on the uncertainty threshold eta.
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - eta: uncertainty threshold for flagging images for manual review
-
-    Returns:
-        - unc_pass: subset of merged with uncertainty <= eta (model is confident in its prediction of probability)
-        - unc_fail: subset of merged with uncertainty > eta (model is uncertain)
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param eta: Uncertainty threshold for flagging images for manual review.
+    :type eta: float
+    :returns: A tuple containing the subset of merged with uncertainty <= eta and the subset with uncertainty > eta.
+    :rtype: Tuple[pd.DataFrame, pd.DataFrame]
     """
     unc_pass = merged[merged['scaled_std_pred'] <= eta]
     unc_fail = merged[merged['scaled_std_pred'] > eta]
     return unc_pass, unc_fail
 
-def split_by_prob(unc_pass, lower, upper):
+def split_by_prob(unc_pass: pd.DataFrame, lower: float, upper: float) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Split the predictions dataframe into three subsets based on the probability thresholds lower and upper.
 
-    Args:
-        - unc_pass: set of predictions where model is confident in its prediction of probability 
-            (from split_by_uncertainty)
-        - lower: lower probability threshold for class assignment
-        - upper: upper probability threshold for class assignment
-
-    Returns:
-        - def_clean: subset of unc_pass with mean_pred < lower (model is confident in its prediction of 'clean')
-        - prob_fail: subset of unc_pass with lower <= mean_pred <= upper (model-predicted probability is intermediate (but certain))
-        - def_dirty: subset of unc_pass with mean_pred > upper (model is confident in its prediction of 'dirty')
+    :param unc_pass: Set of predictions where model is confident in its prediction of probability 
+                     (from split_by_uncertainty).
+    :type unc_pass: pd.DataFrame
+    :param lower: Lower probability threshold for class assignment.
+    :type lower: float
+    :param upper: Upper probability threshold for class assignment.
+    :type upper: float
+    :returns: A tuple containing the subset of unc_pass with mean_pred < lower, the subset with lower <= mean_pred <= upper, and the subset with mean_pred > upper.
+    :rtype: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
     """
     def_clean = unc_pass[unc_pass['mean_pred'] < lower]
     def_dirty = unc_pass[unc_pass['mean_pred'] > upper]
     prob_fail = unc_pass[(unc_pass['mean_pred'] >= lower) & (unc_pass['mean_pred'] <= upper)]
     return def_clean, prob_fail, def_dirty
 
-def ternary_split(merged, eta, theta, tau):
+def ternary_split(merged: pd.DataFrame, eta: float, theta: float, tau: float) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Split the predictions dataframe into three subsets based on the uncertainty and probability thresholds.
 
     Images with high prediction uncertainty sigma > eta are flagged for manual review,
     the rest are classified into 'clean', 'artefact', or 'for_review' based on two probability thresholds.
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - eta: uncertainty threshold for flagging images for manual review
-        - theta: lower probability threshold for clean class assignment
-        - tau: upper probability threshold for artefact class assignment
-
-    Returns:
-        - def_clean: predictions where sigma <= eta and mean_pred < theta (classified as clean)
-        - def_dirty: predictions where sigma <= eta and mean_pred > tau (classified as artefacts)
-        - unc_fail: predictions where sigma > eta (flagged for manual review due to model uncertainty)
-        - prob_fail: predictions where theta <= mean_pred <= tau (flagged for manual review due to model 
-            being certain in intermediate probability assignment)
-        - for_review: combination of previous two (total set flagged for manual review)
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param eta: Uncertainty threshold for flagging images for manual review.
+    :type eta: float
+    :param theta: Lower probability threshold for clean class assignment.
+    :type theta: float
+    :param tau: Upper probability threshold for artefact class assignment.
+    :type tau: float
+    :returns: A tuple containing the predictions classified as clean, artefacts, flagged for manual review due to model uncertainty, flagged for manual review due to intermediate probability assignment, and the total set flagged for manual review.
+    :rtype: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]
     """
     # split into 3 subsets: clean, dirty, for_review
     # also return for_review split by review reason
@@ -633,25 +693,30 @@ def ternary_split(merged, eta, theta, tau):
 
     return def_clean, def_dirty, for_review, unc_fail, prob_fail
 
-def ternary_metrics(def_clean, def_dirty, for_review, unc_fail):
+def ternary_metrics(def_clean: pd.DataFrame, def_dirty: pd.DataFrame, for_review: pd.DataFrame, unc_fail: pd.DataFrame) -> Tuple[int, float, int, float, float, int, float]:
     """
     Calculate performance metrics for a pre-computed ternary split of a test set into clean, 
     artefact, and for_review subsets.
 
     Computes:
-        - size_clean: number of labelled-clean images
-        - impurity_clean: fraction of labelled-clean images that are artefacts (FN rate)
-        - size_dirty: number of labelled-artefact images
-        - impurity_dirty: fraction of labelled-artefact images that are clean (FP rate)
-        - wrkld_reduction: fraction of images that are not flagged for manual review
-        - size_for_rev: number of images flagged for manual review
-        - frac_dffmred_because_uncertain: fraction of images flagged for manual review due to model uncertainty
+        - size_clean: Number of labelled-clean images
+        - impurity_clean: Fraction of labelled-clean images that are artefacts (FN rate)
+        - size_dirty: Number of labelled-artefact images
+        - impurity_dirty: Fraction of labelled-artefact images that are clean (FP rate)
+        - wrkld_reduction: Fraction of images that are not flagged for manual review
+        - size_for_rev: Number of images flagged for manual review
+        - frac_dffmred_because_uncertain: Fraction of images flagged for manual review due to model uncertainty
 
-    Args:
-        - def_clean: subset of merged with mean_pred < theta (model is confident in its prediction of 'clean')
-        - def_dirty: subset of merged with mean_pred > tau (model is confident in its prediction of 'dirty')
-        - for_review: subset of merged with theta <= mean_pred <= tau (model-predicted probability is intermediate (but certain))
-        - unc_fail: subset of merged with uncertainty > eta (model is uncertain)
+    :param def_clean: Subset of merged with mean_pred < theta (model is confident in its prediction of 'clean').
+    :type def_clean: pd.DataFrame
+    :param def_dirty: Subset of merged with mean_pred > tau (model is confident in its prediction of 'dirty').
+    :type def_dirty: pd.DataFrame
+    :param for_review: Subset of merged with theta <= mean_pred <= tau (model-predicted probability is intermediate (but certain)).
+    :type for_review: pd.DataFrame
+    :param unc_fail: Subset of merged with uncertainty > eta (model is uncertain).
+    :type unc_fail: pd.DataFrame
+    :returns: A tuple containing size_clean, impurity_clean, size_dirty, impurity_dirty, wrkld_reduction, size_for_rev, and frac_dffmred_because_uncertain.
+    :rtype: Tuple[int, float, int, float, float, int, float]
     """
     size_clean, size_dirty, size_for_rev = def_clean.shape[0], def_dirty.shape[0], for_review.shape[0]
     impurity_clean = def_clean['bin_gt'].mean() if def_clean.shape[0] > 0 else 0
@@ -661,27 +726,27 @@ def ternary_metrics(def_clean, def_dirty, for_review, unc_fail):
     frac_dffmred_because_uncertain = unc_fail.shape[0] / for_review.shape[0] if for_review.shape[0] > 0 else np.nan
     return size_clean, impurity_clean, size_dirty, impurity_dirty, 1-dffmr, size_for_rev, frac_dffmred_because_uncertain
 
-def ternary_gridpoint_metrics(merged, lattice_size=50):
+def ternary_gridpoint_metrics(merged: pd.DataFrame, lattice_size: int = 50) -> pd.DataFrame:
     """
     Calculate performance metrics for a grid of eta, theta, tau values.
 
     At each grid-point, split testset into clean, artefact, and for_review subsets 
     using thresholds eta, theta, tau and the aggregated model prediction. 
     Then calculates for that choice of thresholds:
-        - size_clean: number of labelled-clean images
-        - impurity_clean: fraction of labelled-clean images that are artefacts (FN rate)
-        - size_dirty: number of labelled-artefact images
-        - impurity_dirty: fraction of labelled-artefact images that are clean (FP rate)
-        - wrkld_reduction: fraction of images that are not flagged for manual review
-        - size_for_rev: number of images flagged for manual review
-        - frac_dffmred_because_uncertain: fraction of images flagged for manual review due to model uncertainty
+        - size_clean: Number of labelled-clean images
+        - impurity_clean: Fraction of labelled-clean images that are artefacts (FN rate)
+        - size_dirty: Number of labelled-artefact images
+        - impurity_dirty: Fraction of labelled-artefact images that are clean (FP rate)
+        - wrkld_reduction: Fraction of images that are not flagged for manual review
+        - size_for_rev: Number of images flagged for manual review
+        - frac_dffmred_because_uncertain: Fraction of images flagged for manual review due to model uncertainty
 
-    Args:
-        - merged: dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt)
-        - lattice_size: number of gridpoints for eta, theta, tau
-
-    Returns:
-        - a dataframe of metrics for each gridpoint in the eta-theta-tau space
+    :param merged: Dataframe of merged model predictions and ground-truth labels (from merge_predictions_and_gt).
+    :type merged: pd.DataFrame
+    :param lattice_size: Number of gridpoints for eta, theta, tau.
+    :type lattice_size: int
+    :returns: A dataframe of metrics for each gridpoint in the eta-theta-tau space.
+    :rtype: pd.DataFrame
     """
     etas = np.linspace(0, 1, lattice_size)
     thetas = np.linspace(0, 1, lattice_size)
@@ -695,16 +760,31 @@ def ternary_gridpoint_metrics(merged, lattice_size=50):
                                                                 names=['eta', 'theta', 'tau'])
     return gridpoint_ternary_metrics
 
-def sort_and_filter_tensor(metrics_tensor, raw_data, max_clean_impurity=0.0, min_dirty_impurity=0.95, min_wrkld_red=0.5, OUTDIR='analysis_A_out'):
+def sort_and_filter_tensor(metrics_tensor: pd.DataFrame, raw_data: pd.DataFrame, max_clean_impurity: float = 0.0, min_dirty_impurity: float = 0.95, min_wrkld_red: float = 0.5, OUTDIR: str = 'analysis_A_out') -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Sanity-checks constraints against input data statistics (output must be better than input).
-        max_clean_impurity i.e. max acceptable FN (missed artefacts)
-        min_dirty_impurity i.e. max acceptable FP (needlessly rejected scans)
+    max_clean_impurity i.e. max acceptable FN (missed artefacts)
+    min_dirty_impurity i.e. max acceptable FP (needlessly rejected scans)
 
     Sorts the gridpoints by achieved impurity_clean, wrkld_reduction, impurity_dirty.
     Filters out gridpoints that give no workload improvement or do satisfy constraints:
        
     Writes the full_tensor and filtered_tensor to file.
+
+    :param metrics_tensor: Dataframe of metrics for each gridpoint.
+    :type metrics_tensor: pd.DataFrame
+    :param raw_data: Dataframe of raw data.
+    :type raw_data: pd.DataFrame
+    :param max_clean_impurity: Maximum acceptable impurity for clean images.
+    :type max_clean_impurity: float
+    :param min_dirty_impurity: Minimum acceptable impurity for dirty images.
+    :type min_dirty_impurity: float
+    :param min_wrkld_red: Minimum acceptable workload reduction.
+    :type min_wrkld_red: float
+    :param OUTDIR: Output directory for the files.
+    :type OUTDIR: str
+    :returns: A tuple containing the full tensor and the filtered tensor.
+    :rtype: Tuple[pd.DataFrame, pd.DataFrame]
     """
     input_impurity = raw_data['bin_gt'].mean()
     assert(max_clean_impurity < input_impurity) # otherwise no point in running the model
@@ -730,7 +810,34 @@ def sort_and_filter_tensor(metrics_tensor, raw_data, max_clean_impurity=0.0, min
 
     return metrics_tensor, within_constraints
 
-def run_ternary_analysis(raw_model_preds, ground_truth_labels, MC=20, nbins=10, lattice_size=50, option='mean_class', OUTDIR='analysis_A_out', init_thresh=0.5,  max_clean_impurity=0.0, min_dirty_impurity=0.95, min_wrkld_red=0.5):
+def run_ternary_analysis(raw_model_preds: pd.DataFrame, ground_truth_labels: pd.DataFrame, MC: int = 20, nbins: int = 10, lattice_size: int = 50, option: str = 'mean_class', OUTDIR: str = 'analysis_A_out', init_thresh: float = 0.5,  max_clean_impurity: float = 0.0, min_dirty_impurity: float = 0.95, min_wrkld_red: float = 0.5) -> None:
+    """
+    Run a ternary analysis on the model predictions and ground-truth labels.
+    Compare `eval_theory.pdf` for more details.
+
+    :param raw_model_preds: Dataframe of raw model predictions.
+    :type raw_model_preds: pd.DataFrame
+    :param ground_truth_labels: Dataframe of ground-truth labels.
+    :type ground_truth_labels: pd.DataFrame
+    :param MC: Number of Monte Carlo runs.
+    :type MC: int
+    :param nbins: Number of bins for the histograms.
+    :type nbins: int
+    :param lattice_size: Number of gridpoints for eta, theta, tau.
+    :type lattice_size: int
+    :param option: How to aggregate model predictions.
+    :type option: str
+    :param OUTDIR: Output directory for the plots.
+    :type OUTDIR: str
+    :param init_thresh: Initial threshold for class assignment.
+    :type init_thresh: float
+    :param max_clean_impurity: Maximum acceptable impurity for clean images.
+    :type max_clean_impurity: float
+    :param min_dirty_impurity: Minimum acceptable impurity for dirty images.
+    :type min_dirty_impurity: float
+    :param min_wrkld_red: Minimum acceptable workload reduction.
+    :type min_wrkld_red: float
+    """
     # collate model preds, do basic plots
     merged = run_synoptic_analysis(raw_model_preds, ground_truth_labels, MC, nbins, option, OUTDIR, init_thresh)
     # get metrics for each possible split of predictions by eta, theta, tau
