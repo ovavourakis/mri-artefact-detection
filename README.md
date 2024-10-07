@@ -16,7 +16,7 @@ A convolutional Bayesian neural network to detect the presence of acquisition ar
 
 1. Our Bayesian Neural Network model predicts the probability an image contains an artefact, and is trained with BCE loss with predictions stochastically varying across inference runs. 
 2. During training, each image is processed once per epoch, while inference involves multiple passes to generate predictions, which can be averaged before or after class thresholding for final results. 
-3. Users can choose between binary ('clean' vs. 'artefact') and ternary ('clean', 'artefact', 'manual review needed'; see `eval_theory.pdf`) classification schemes during performance evaluation. The latter will output performance metrics for different threshold choices allowing the user to select an operating point that balances review workload and data accuracy. 
+3. Users can choose between binary ('clean' vs. 'artefact') and ternary ('clean', 'artefact', 'manual review needed'; see [`eval_theory.pdf`](eval_theory.pdf)) classification schemes during performance evaluation. The latter will output performance metrics for different threshold choices allowing the user to select an operating point that balances review workload and data accuracy.
 4. Data is split by patient ID for training/validation/testing, and users can define the ratio of clean to artefact images. If the dataset doesn't match this ratio, synthetic images are generated through transformations or artefact simulations. The distribution of synthetic artefacts can be adjusted by the user.
 
 ## Installation
@@ -40,15 +40,15 @@ Required Arguments:
 - `--datadir`: directory containing the dataset (structured as described below).
 - `--savedir`: directory where training outputs and checkpoints will be saved.
 
-The following options allow you
+Options:
 
-- to use only specific data subsets during training
+- use only specific data subsets during training
 
     - `--datasets`: comma-separated list of data subset names to be used for training. (default: "artefacts1,artefacts2,artefacts3")
     - `--contrasts`: comma-separated list of MRI contrasts to be considered. (default: "T1wMPR")
     - `--quals`: comma-separated list of quality labels to be considered (default: "clean,exp_artefacts")
 
-- to specify a desired distribution among synthetic artefacts to be introduced (see [`torchio`]() for examples)
+- specify a desired distribution among synthetic artefacts to be introduced (see [`torchio`](https://torchio.readthedocs.io/transforms/augmentation.html) for examples)
 
     - `--target-clean-ratio`: desired fraction of 'clean' images (default: 0.5)
     - `--random-affine`: probability for random affine transformation (default: 1/12)
@@ -64,7 +64,7 @@ The following options allow you
     - `--random-swap`: probability for random swap artefact (default: 1/12)
     - `--random-gamma`: probability for random gamma shift artefact (default: 1/12)
 
-- to alter the number of inference passes per item in the test set 
+- alter the number of inference passes per item in the test set 
 
     - `--mc-runs`: number of Monte Carlo runs on the test set. (default: 20)
 
