@@ -1,7 +1,3 @@
-"""
-Load a pre-trained model and perform inference.
-"""
-
 import os, keras, pandas as pd, numpy as np
 import tensorflow as tf
 from keras.metrics import AUC

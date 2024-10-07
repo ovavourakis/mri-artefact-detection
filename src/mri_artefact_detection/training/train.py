@@ -1,8 +1,3 @@
-'''
-    Script to train the model.
-'''
-
-# IMPORTS
 import os, numpy as np, pandas as pd
 from .train_utils import *
 from .model import *

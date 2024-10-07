@@ -1,18 +1,3 @@
-"""
-Example script to analyse raw model predictions produced by inference/inference.py
-on a test set with known labels.
-
-Takes as input a file MODEL_PREDS containing model predictions, as well as the 
-ground truth labels (bin_gt) for the test set, as a tab-separated file with the 
-following format:
-
-image                           bin_gt      pred_1    ...       pred_20
-sub-926536_acq-headmotion1_T1w  1           0.433381  ...  5.049924e-01
-sub-926536_acq-standard_T1w     0           0.003448  ...  6.611057e-02
-
-where the pred_X columns are the raw model probability output from different MC samples.
-"""
-
 from .analysis_utils import *
 
 def evaluate(MODEL_PREDS: str, TERNARY: bool):
