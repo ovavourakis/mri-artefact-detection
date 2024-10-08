@@ -321,7 +321,7 @@ def pointwise_metrics(retained: pd.DataFrame, theta: float) -> Tuple[float, floa
     :rtype: Tuple[float, float, float, float, float]
     """
     binarised_preds = retained['mean_pred'] > theta
-    tn, fp, fn, tp = confusion_matrix(retained['bin_gt'], binarised_preds).ravel()
+    tn, fp, fn, tp = confusion_matrix(retained['bin_gt'], binarised_preds, labels=[0,1]).ravel()
     accuracy = (tp+tn)/(tp+tn+fp+fn) if (tp+tn+fp+fn > 0) else np.nan
     specificity = tn / (tn+fp) if (tn+fp > 0) else np.nan
     F1 = f1_score(retained['bin_gt'], binarised_preds, zero_division=np.nan)
