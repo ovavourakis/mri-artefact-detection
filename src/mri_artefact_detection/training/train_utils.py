@@ -1,6 +1,6 @@
-'''
+"""
     Helper classes and functions for model training. 
-'''
+"""
 
 import os, random, time
 import numpy as np, matplotlib.pyplot as plt
@@ -12,9 +12,10 @@ from keras.utils import Sequence
 from keras.callbacks import Callback
 from sklearn.model_selection import GroupShuffleSplit
 
+
 class PrintModelWeightsNorm(Callback):
     """
-    Keras callback to print the L2 norm of the model weights at the end of 
+    Keras callback to print the L2 norm of the model weights at the end of
     each epoch.
 
     Attributes
@@ -37,7 +38,9 @@ class PrintModelWeightsNorm(Callback):
         :param logs: Dictionary of logs from the epoch, defaults to None.
         :type logs: dict, optional
         """
-        weights_norm = tf.sqrt(sum(tf.reduce_sum(tf.square(w)) for w in self.model.weights))
+        weights_norm = tf.sqrt(
+            sum(tf.reduce_sum(tf.square(w)) for w in self.model.weights)
+        )
         print(f"\nNorm of weights after epoch {epoch+1}: {weights_norm.numpy()}")
 
 
@@ -56,42 +59,57 @@ def split_by_patient(real_image_paths: list, pids: list, real_labels: list) -> t
     :rtype: tuple
     """
     # remove patients with only one image
-    pid_counts = {pid:0 for pid in pids}
+    pid_counts = {pid: 0 for pid in pids}
     for pid in pids:
         pid_counts[pid] += 1
     pids_to_remove = [pid for pid in pid_counts if pid_counts[pid] < 3]
-    
-    real_image_paths = [path for path, pid in zip(real_image_paths, pids) if pid not in pids_to_remove]
-    real_labels = [label for label, pid in zip(real_labels, pids) if pid not in pids_to_remove]
+
+    real_image_paths = [
+        path for path, pid in zip(real_image_paths, pids) if pid not in pids_to_remove
+    ]
+    real_labels = [
+        label for label, pid in zip(real_labels, pids) if pid not in pids_to_remove
+    ]
     pids = [pid for pid in pids if pid not in pids_to_remove]
 
-    artf_frc = [1,0,0]
-    while max(artf_frc)-min(artf_frc)>0.02:
-        for trvidx, testidx in GroupShuffleSplit(n_splits=1, test_size=0.1).split(real_image_paths, real_labels, pids):
-            Xtrval, Xtest = [real_image_paths[i] for i in trvidx], [real_image_paths[i] for i in testidx]
-            ytrval, ytest = [real_labels[i] for i in trvidx], [real_labels[i] for i in testidx]
+    artf_frc = [1, 0, 0]
+    while max(artf_frc) - min(artf_frc) > 0.02:
+        for trvidx, testidx in GroupShuffleSplit(n_splits=1, test_size=0.1).split(
+            real_image_paths, real_labels, pids
+        ):
+            Xtrval, Xtest = [real_image_paths[i] for i in trvidx], [
+                real_image_paths[i] for i in testidx
+            ]
+            ytrval, ytest = [real_labels[i] for i in trvidx], [
+                real_labels[i] for i in testidx
+            ]
             pid_trval, pid_test = [pids[i] for i in trvidx], [pids[i] for i in testidx]
 
-        for tridx, validx in GroupShuffleSplit(n_splits=1, test_size=0.2222).split(Xtrval, ytrval, pid_trval):
+        for tridx, validx in GroupShuffleSplit(n_splits=1, test_size=0.2222).split(
+            Xtrval, ytrval, pid_trval
+        ):
             Xtrain, Xval = [Xtrval[i] for i in tridx], [Xtrval[i] for i in validx]
             ytrain, yval = [ytrval[i] for i in tridx], [ytrval[i] for i in validx]
-            pid_train, pid_val = [pid_trval[i] for i in tridx], [pid_trval[i] for i in validx]
+            pid_train, pid_val = [pid_trval[i] for i in tridx], [
+                pid_trval[i] for i in validx
+            ]
 
         # assert there is not overlap between pid_train and pid_test, and pid_val
         assert len(set(pid_train).intersection(set(pid_test))) == 0
         assert len(set(pid_val).intersection(set(pid_test))) == 0
         assert len(set(pid_train).intersection(set(pid_val))) == 0
 
-        artf_frc = [sum(y)/len(y) for y in [ytrain, yval, ytest]]
+        artf_frc = [sum(y) / len(y) for y in [ytrain, yval, ytest]]
 
     return Xtrain, Xval, Xtest, np.array(ytrain), np.array(yval), np.array(ytest)
+
 
 class ImageReader:
     """
     Class to read and preprocess images from disk.
 
-    :Description: 
-        Handles image loading, synthetic augmentation, and preprocessing 
+    :Description:
+        Handles image loading, synthetic augmentation, and preprocessing
         (resizing, normalization, padding, etc.).
 
     :Attributes:
@@ -116,22 +134,26 @@ class ImageReader:
         self.output_size = output_size
 
         self.Synths = {
-            "RandomAffine": tio.RandomAffine(scales=(1.5, 1.5)),        # zooming in on the images
-            "RandomElasticDeformation": tio.RandomElasticDeformation(), # elastic deformation of the images
-            "RandomAnisotropy": tio.RandomAnisotropy(),                 # anisotropic deformation of the images
-            "RescaleIntensity": tio.RescaleIntensity((0.5, 1.5)),       # rescaling the intensity of the images
-            "RandomMotion": tio.RandomMotion(),                         # filling the  𝑘 -space with random rigidly-transformed versions of the original images
-            "RandomGhosting": tio.RandomGhosting(),                     # removing every  𝑛 th plane from the k-space
-            "RandomSpike": tio.RandomSpike(),                           # signal peak in  𝑘 -space,
-            "RandomBiasField": tio.RandomBiasField(),                   # Magnetic field inhomogeneities in the MRI scanner produce low-frequency intensity distortions in the images
-            "RandomBlur": tio.RandomBlur(),                             # blurring the images
-            "RandomNoise": tio.RandomNoise(),                           # adding noise to the images
-            "RandomSwap": tio.RandomSwap(),                             # swapping the phase and magnitude of the images
-            "RandomGamma": tio.RandomGamma(),                           # intensity of the images
+            "RandomAffine": tio.RandomAffine(
+                scales=(1.5, 1.5)
+            ),  # zooming in on the images
+            "RandomElasticDeformation": tio.RandomElasticDeformation(),  # elastic deformation of the images
+            "RandomAnisotropy": tio.RandomAnisotropy(),  # anisotropic deformation of the images
+            "RescaleIntensity": tio.RescaleIntensity(
+                (0.5, 1.5)
+            ),  # rescaling the intensity of the images
+            "RandomMotion": tio.RandomMotion(),  # filling the  𝑘 -space with random rigidly-transformed versions of the original images
+            "RandomGhosting": tio.RandomGhosting(),  # removing every  𝑛 th plane from the k-space
+            "RandomSpike": tio.RandomSpike(),  # signal peak in  𝑘 -space,
+            "RandomBiasField": tio.RandomBiasField(),  # Magnetic field inhomogeneities in the MRI scanner produce low-frequency intensity distortions in the images
+            "RandomBlur": tio.RandomBlur(),  # blurring the images
+            "RandomNoise": tio.RandomNoise(),  # adding noise to the images
+            "RandomSwap": tio.RandomSwap(),  # swapping the phase and magnitude of the images
+            "RandomGamma": tio.RandomGamma(),  # intensity of the images
             # "RandomWrapAround" : self.RandomWrapAround                  # wrapping around the images: Aliasing Artifact
         }
         # pre-processing
-        self.orient = tio.transforms.ToCanonical()                  # RAS+ orientation
+        self.orient = tio.transforms.ToCanonical()  # RAS+ orientation
         self.normalise = tio.transforms.ZNormalization()
         self.crop_pad = tio.transforms.CropOrPad(self.output_size)
         self.preprocess = tio.Compose([self.orient, self.normalise, self.crop_pad])
@@ -146,9 +168,21 @@ class ImageReader:
         :rtype: tio.ScalarImage
         """
         # 1 - Checking the extension on the img_path + storing it as extension_name (i.e the modification to apply)
-        extensions = ["CAug", "RandomAffine", 'RandomElasticDeformation',
-                      'RandomAnisotropy', 'RescaleIntensity', 'RandomMotion', 'RandomGhosting', 'RandomSpike',
-                      'RandomBiasField', 'RandomBlur', 'RandomNoise', 'RandomSwap', 'RandomGamma']  # , 'RandomWrapAround']
+        extensions = [
+            "CAug",
+            "RandomAffine",
+            "RandomElasticDeformation",
+            "RandomAnisotropy",
+            "RescaleIntensity",
+            "RandomMotion",
+            "RandomGhosting",
+            "RandomSpike",
+            "RandomBiasField",
+            "RandomBlur",
+            "RandomNoise",
+            "RandomSwap",
+            "RandomGamma",
+        ]  # , 'RandomWrapAround']
         extension_name = None
         for extension in extensions:
             if extension in img_path:
@@ -167,17 +201,32 @@ class ImageReader:
             idx_flip = [index for index, value in enumerate(binary_flip) if value == 1]
             flipping = tio.RandomFlip(axes=idx_flip, flip_probability=1)
             scaling = tio.RandomAffine(scales=(0.1))  # If only one value: U(1-x, 1+x)
-            shifting = tio.RandomAffine(translation=(0.1))  # If only one value: U(-x, x)
+            shifting = tio.RandomAffine(
+                translation=(0.1)
+            )  # If only one value: U(-x, x)
             rotating = tio.RandomAffine(degrees=(10))  # If only one value: U(-x, x)
             modification = tio.Compose([flipping, scaling, shifting, rotating])
 
-        elif extension_name in ["RandomAffine", 'RandomElasticDeformation', 'RandomAnisotropy', 'RescaleIntensity',
-                                'RandomMotion', 'RandomGhosting', 'RandomSpike', 'RandomBiasField', 'RandomBlur',
-                                'RandomNoise', 'RandomSwap', 'RandomGamma']:  # , 'RandomWrapAround']:
+        elif extension_name in [
+            "RandomAffine",
+            "RandomElasticDeformation",
+            "RandomAnisotropy",
+            "RescaleIntensity",
+            "RandomMotion",
+            "RandomGhosting",
+            "RandomSpike",
+            "RandomBiasField",
+            "RandomBlur",
+            "RandomNoise",
+            "RandomSwap",
+            "RandomGamma",
+        ]:  # , 'RandomWrapAround']:
             modification = self.Synths[extension_name]
 
         else:
-            raise ValueError(f"Path extension (augmentation) {extension_name} not recognised")
+            raise ValueError(
+                f"Path extension (augmentation) {extension_name} not recognised"
+            )
 
         # 4 - Apply the modification on the modified image and return modified version
         return modification(img)
@@ -191,13 +240,15 @@ class ImageReader:
         :return: Augmented (if pre-specified) and preprocessed image tensor.
         :rtype: torch.Tensor
         """
-        img = self._apply_modifications(path)  # introduce artefacts, if specified in path_name
+        img = self._apply_modifications(
+            path
+        )  # introduce artefacts, if specified in path_name
         return self.preprocess(img).tensor  # re-orient, normalise, crop/pad
 
 
 class DataCrawler:
     """
-    The DataCrawler class is responsible for traversing dataset directories to gather and return lists of image paths 
+    The DataCrawler class is responsible for traversing dataset directories to gather and return lists of image paths
     and their corresponding labels, distinguishing between clean and artefact images.
 
     Attributes
@@ -221,7 +272,9 @@ class DataCrawler:
         Crawls the dataset directories and returns lists of image paths and labels.
     """
 
-    def __init__(self, datadir: str, datasets: list, image_contrasts: list, image_qualities: list):
+    def __init__(
+        self, datadir: str, datasets: list, image_contrasts: list, image_qualities: list
+    ):
         """
         Initializes the DataCrawler with dataset parameters.
 
@@ -240,7 +293,9 @@ class DataCrawler:
         self.image_contrasts = image_contrasts
         self.image_qualities = image_qualities
 
-    def _check_inputs(self, datadir: str, datasets: list, image_contrasts: list, image_qualities: list):
+    def _check_inputs(
+        self, datadir: str, datasets: list, image_contrasts: list, image_qualities: list
+    ):
         """
         Checks the validity of the input parameters.
 
@@ -254,15 +309,15 @@ class DataCrawler:
         :type image_qualities: list
         """
         # do paths to all requested types of images exist?
-        assert (os.path.isdir(datadir))
+        assert os.path.isdir(datadir)
         for d in datasets:
-            assert (os.path.isdir(os.path.join(datadir, d)))
+            assert os.path.isdir(os.path.join(datadir, d))
             for c in image_contrasts:
-                assert (c in ['T1wMPR', 'T1wTIR', 'T2w', 'T2starw', 'FLAIR'])
+                assert c in ["T1wMPR", "T1wTIR", "T2w", "T2starw", "FLAIR"]
                 if os.path.isdir(os.path.join(datadir, c)):
                     for q in image_qualities:
-                        assert (q in ['clean', 'exp_artefacts'])
-                        assert (os.path.isdir(os.path.join(datadir, c, q)))
+                        assert q in ["clean", "exp_artefacts"]
+                        assert os.path.isdir(os.path.join(datadir, c, q))
 
     def crawl(self) -> tuple:
         """
@@ -281,13 +336,13 @@ class DataCrawler:
                         path = os.path.join(self.datadir, d, c, q)
                         images = os.listdir(path)
                         img_paths = [os.path.join(path, i) for i in images]
-                        if q == 'clean':
+                        if q == "clean":
                             clean_img_paths.extend(img_paths)
                         else:
                             artefacts_img_paths.extend(img_paths)
         # parse out the subject IDs from the paths
-        clean_ids = [p.split('sub-')[1].split('_')[0] for p in clean_img_paths]
-        artefacts_ids = [p.split('sub-')[1].split('_')[0] for p in artefacts_img_paths]
+        clean_ids = [p.split("sub-")[1].split("_")[0] for p in clean_img_paths]
+        artefacts_ids = [p.split("sub-")[1].split("_")[0] for p in artefacts_img_paths]
         # define the appropriate labels
         num_clean = len(clean_img_paths)
         num_artefacts = len(artefacts_img_paths)
@@ -321,7 +376,7 @@ class DataLoader(Sequence):
     :Methods:
         __init__(Xpaths, y_true, batch_size, image_shape, train_mode=True, target_clean_ratio=None, artef_distro=None):
             Initializes the DataLoader with the given parameters, checks the validity of inputs, and prepares the dataset for training or evaluation.
-        
+
         _check_inputs(Xpaths, y_true, artef_distro, target_clean_ratio, train_mode):
             Checks the validity of the input parameters for DataLoader.
 
@@ -346,8 +401,16 @@ class DataLoader(Sequence):
             Pre-defines augmentations to be performed on specific images in order to reach a target ratio of clean images to artefact-images.
     """
 
-    def __init__(self, Xpaths: list, y_true: np.ndarray, batch_size: int, image_shape: tuple,
-                 train_mode: bool = True, target_clean_ratio: float = None, artef_distro: dict = None):
+    def __init__(
+        self,
+        Xpaths: list,
+        y_true: np.ndarray,
+        batch_size: int,
+        image_shape: tuple,
+        train_mode: bool = True,
+        target_clean_ratio: float = None,
+        artef_distro: dict = None,
+    ):
         """
         Initializes the DataLoader with the given parameters, checks the validity of inputs, and prepares the dataset for training or evaluation.
 
@@ -384,9 +447,18 @@ class DataLoader(Sequence):
             self.target_artef_distro = artef_distro
 
         # paths to all images, including synthetic ones; split into batches
-        self.clean_img_paths, self.artefacts_img_paths, self.batches, self.labels = self.on_epoch_end()
+        self.clean_img_paths, self.artefacts_img_paths, self.batches, self.labels = (
+            self.on_epoch_end()
+        )
 
-    def _check_inputs(self, Xpaths: list, y_true: np.ndarray, artef_distro: dict, target_clean_ratio: float, train_mode: bool):
+    def _check_inputs(
+        self,
+        Xpaths: list,
+        y_true: np.ndarray,
+        artef_distro: dict,
+        target_clean_ratio: float,
+        train_mode: bool,
+    ):
         """
         Checks the validity of the input parameters for DataLoader.
 
@@ -401,18 +473,29 @@ class DataLoader(Sequence):
         :param train_mode: Whether the loader is in training mode.
         :type train_mode: bool
         """
-        assert (len(Xpaths) == len(y_true))
-        assert (len(np.unique(y_true)) == 2)
+        assert len(Xpaths) == len(y_true)
+        assert len(np.unique(y_true)) == 2
         if train_mode:
-            assert (target_clean_ratio >= 0 and target_clean_ratio <= 1)
+            assert target_clean_ratio >= 0 and target_clean_ratio <= 1
             # artef_distro defines a categorical probability distribution over (synthetic) artefact types
-            assert (isinstance(artef_distro, dict))
-            assert (np.allclose(sum(artef_distro.values()), 1))
+            assert isinstance(artef_distro, dict)
+            assert np.allclose(sum(artef_distro.values()), 1)
             for k, v in artef_distro.items():
-                assert (v >= 0)
-                assert (k in ['RandomAffine', 'RandomElasticDeformation', 'RandomAnisotropy', 'RescaleIntensity',
-                              'RandomMotion', 'RandomGhosting', 'RandomSpike', 'RandomBiasField', 'RandomBlur',
-                              'RandomNoise', 'RandomSwap', 'RandomGamma'])  # , 'RandomWrapAround'])
+                assert v >= 0
+                assert k in [
+                    "RandomAffine",
+                    "RandomElasticDeformation",
+                    "RandomAnisotropy",
+                    "RescaleIntensity",
+                    "RandomMotion",
+                    "RandomGhosting",
+                    "RandomSpike",
+                    "RandomBiasField",
+                    "RandomBlur",
+                    "RandomNoise",
+                    "RandomSwap",
+                    "RandomGamma",
+                ]  # , 'RandomWrapAround'])
 
     def _get_clean_ratio(self) -> tuple:
         """
@@ -437,7 +520,7 @@ class DataLoader(Sequence):
         :rtype: tuple
         """
 
-        def _pick_augment(path: str, aug_type: str = 'clean') -> str:
+        def _pick_augment(path: str, aug_type: str = "clean") -> str:
             """
             Defines which augmentation will be performed for a given image and appends it to the image path.
             Artefacts are randomly drawn from a pre-specified distribution.
@@ -449,17 +532,19 @@ class DataLoader(Sequence):
             :return: Augmented image path.
             :rtype: str
             """
-            if aug_type == 'clean':
-                aug = 'CAug'
-            elif aug_type == 'artefact':
+            if aug_type == "clean":
+                aug = "CAug"
+            elif aug_type == "artefact":
                 augs = list(self.target_artef_distro.keys())
                 probs = list(self.target_artef_distro.values())
                 aug = np.random.choice(augs, size=1, p=probs)[0]
             else:
                 raise ValueError('aug_type must be either "clean" or "artefact"')
             dir, file = os.path.split(path)
-            fname, ext = file.split('.', 1)  # just the first dot, so we don't split extensions like .nii.gz
-            return os.path.join(dir, fname) + '_' + aug + '.' + ext
+            fname, ext = file.split(
+                ".", 1
+            )  # just the first dot, so we don't split extensions like .nii.gz
+            return os.path.join(dir, fname) + "_" + aug + "." + ext
 
         clean_ratio, cleans, total = self._get_clean_ratio()
         clean_img_paths = self.Clean_img_paths
@@ -468,16 +553,23 @@ class DataLoader(Sequence):
         if clean_ratio < self.target_clean_ratio:
             # oversample clean images with random {flips, shifts, 10% scales, rotations}
             # until desired clean-ratio is reached
-            num_imgs_to_aug = int((total * self.target_clean_ratio - cleans) / (1 - self.target_clean_ratio))
+            num_imgs_to_aug = int(
+                (total * self.target_clean_ratio - cleans)
+                / (1 - self.target_clean_ratio)
+            )
             imgs_to_aug = random.choices(clean_img_paths, k=num_imgs_to_aug)
-            augmented_paths = [_pick_augment(path, aug_type='clean') for path in imgs_to_aug]
+            augmented_paths = [
+                _pick_augment(path, aug_type="clean") for path in imgs_to_aug
+            ]
             clean_img_paths.extend(augmented_paths)
         elif clean_ratio > self.target_clean_ratio:
             # create synthetic artefacts until desired clean-ratio is reached
             # pick augmentations from categorical distro over transform functions of TorchIO
             num_imgs_to_aug = int(cleans / self.target_clean_ratio - total)
             imgs_to_aug = random.choices(clean_img_paths, k=num_imgs_to_aug)
-            augmented_paths = [_pick_augment(path, aug_type='artefact') for path in imgs_to_aug]
+            augmented_paths = [
+                _pick_augment(path, aug_type="artefact") for path in imgs_to_aug
+            ]
             artefacts_img_paths.extend(augmented_paths)
 
         return clean_img_paths, artefacts_img_paths
@@ -515,8 +607,8 @@ class DataLoader(Sequence):
             random.shuffle(self.clean_img_paths)
             random.shuffle(self.artefacts_img_paths)
             batches = [
-                self.clean_img_paths[i * num_clean:(i + 1) * num_clean] + self.artefacts_img_paths[
-                                                                           i * num_artefacts:(i + 1) * num_artefacts]
+                self.clean_img_paths[i * num_clean : (i + 1) * num_clean]
+                + self.artefacts_img_paths[i * num_artefacts : (i + 1) * num_artefacts]
                 for i in range(nb_batches)
             ]
             labels = [[0] * num_clean + [1] * num_artefacts for _ in range(nb_batches)]
@@ -536,10 +628,10 @@ class DataLoader(Sequence):
             batches, labels = [], []
             while len(files) > 0:
                 end_index = min(self.batch_size, len(files))
-                batches.append(files[:end_index]);
+                batches.append(files[:end_index])
                 labels.append(flat_labels[:end_index])
-                files = files[self.batch_size:];
-                flat_labels = flat_labels[self.batch_size:]
+                files = files[self.batch_size :]
+                flat_labels = flat_labels[self.batch_size :]
 
         return batches, labels
 
@@ -555,9 +647,13 @@ class DataLoader(Sequence):
         """
         # read in the images, augment with artefacts as necessary, then apply pre-processing
         start_time = time.time()
-        batch_images = [self.reader.read_image(path) for path in self.batches[idx]]  # TODO: this takes ~30s for 10-image batch
+        batch_images = [
+            self.reader.read_image(path) for path in self.batches[idx]
+        ]  # TODO: this takes ~30s for 10-image batch
         print(f"Batch image loading time: {time.time() - start_time} seconds")
-        X = torch.stack([img.data.permute(1, 2, 3, 0) for img in batch_images])  # put channel dimension last, then stack along new batch dimension (first)
+        X = torch.stack(
+            [img.data.permute(1, 2, 3, 0) for img in batch_images]
+        )  # put channel dimension last, then stack along new batch dimension (first)
 
         # also get appropriate labels
         y_true = self.labels[idx]
@@ -576,11 +672,18 @@ class DataLoader(Sequence):
         # get paths to all images, including synthetic ones, if requested
         if self.train_mode:
             # re-define augmentations to do for next epoch
-            self.clean_img_paths, self.artefacts_img_paths = self._define_augmentations()
+            self.clean_img_paths, self.artefacts_img_paths = (
+                self._define_augmentations()
+            )
         else:
-            self.clean_img_paths, self.artefacts_img_paths = self.Clean_img_paths, self.Artefacts_img_paths
+            self.clean_img_paths, self.artefacts_img_paths = (
+                self.Clean_img_paths,
+                self.Artefacts_img_paths,
+            )
         # split these new image paths into batches
-        self.batches, self.labels = self._def_batches(self.clean_img_paths, self.artefacts_img_paths)
+        self.batches, self.labels = self._def_batches(
+            self.clean_img_paths, self.artefacts_img_paths
+        )
 
         return self.clean_img_paths, self.artefacts_img_paths, self.batches, self.labels
 
@@ -596,38 +699,38 @@ def plot_train_metrics(history, filename: str):
     """
     # Plotting 4x4 metrics
     fig, axs = plt.subplots(2, 2, figsize=(15, 10))
-    fig.suptitle('Training and Validation Metrics')
+    fig.suptitle("Training and Validation Metrics")
 
     # Loss subplot
-    axs[0, 0].plot(history.history['loss'], label='Train Loss')
-    axs[0, 0].plot(history.history['val_loss'], label='Validation Loss')
-    axs[0, 0].set_title('Loss')
-    axs[0, 0].set_xlabel('Epoch')
-    axs[0, 0].set_ylabel('Loss')
+    axs[0, 0].plot(history.history["loss"], label="Train Loss")
+    axs[0, 0].plot(history.history["val_loss"], label="Validation Loss")
+    axs[0, 0].set_title("Loss")
+    axs[0, 0].set_xlabel("Epoch")
+    axs[0, 0].set_ylabel("Loss")
     axs[0, 0].legend()
 
     # Accuracy subplot
-    axs[0, 1].plot(history.history['accuracy'], label='Train Accuracy')
-    axs[0, 1].plot(history.history['val_accuracy'], label='Validation Accuracy')
-    axs[0, 1].set_title('Accuracy')
-    axs[0, 1].set_xlabel('Epoch')
-    axs[0, 1].set_ylabel('Accuracy')
+    axs[0, 1].plot(history.history["accuracy"], label="Train Accuracy")
+    axs[0, 1].plot(history.history["val_accuracy"], label="Validation Accuracy")
+    axs[0, 1].set_title("Accuracy")
+    axs[0, 1].set_xlabel("Epoch")
+    axs[0, 1].set_ylabel("Accuracy")
     axs[0, 1].legend()
 
     # AUROC subplot
-    axs[1, 0].plot(history.history['auroc'], label='Train AUC')
-    axs[1, 0].plot(history.history['val_auroc'], label='Validation AUC')
-    axs[1, 0].set_title('AUC')
-    axs[1, 0].set_xlabel('Epoch')
-    axs[1, 0].set_ylabel('AUC')
+    axs[1, 0].plot(history.history["auroc"], label="Train AUC")
+    axs[1, 0].plot(history.history["val_auroc"], label="Validation AUC")
+    axs[1, 0].set_title("AUC")
+    axs[1, 0].set_xlabel("Epoch")
+    axs[1, 0].set_ylabel("AUC")
     axs[1, 0].legend()
 
     # AUPRC subplot
-    axs[1, 1].plot(history.history['auprc'], label='Train AP')
-    axs[1, 1].plot(history.history['val_auprc'], label='Validation AP')
-    axs[1, 1].set_title('AP')
-    axs[1, 1].set_xlabel('Epoch')
-    axs[1, 1].set_ylabel('AP')
+    axs[1, 1].plot(history.history["auprc"], label="Train AP")
+    axs[1, 1].plot(history.history["val_auprc"], label="Validation AP")
+    axs[1, 1].set_title("AP")
+    axs[1, 1].set_xlabel("Epoch")
+    axs[1, 1].set_ylabel("AP")
     axs[1, 1].legend()
 
     plt.tight_layout()

@@ -6,9 +6,8 @@ https://github.com/ovavourakis/mri-artefact-detection/actions/workflows/ci.yml/b
 https://coveralls.io/repos/github/ovavourakis/mri-artefact-detection/badge.svg?branch=main)](https://coveralls.io/github/ovavourakis/mri-artefact-detection?branch=main)
 [![License: MIT](
 https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-<!-- ![Code style: black](
-https://img.shields.io/badge/code%20style-black-000000.svg) -->
+![Code style: black](
+https://img.shields.io/badge/code%20style-black-000000.svg)
 
 A convolutional Bayesian neural network to detect the presence of acquisition artefacts in MRI brain image volumes.
 
