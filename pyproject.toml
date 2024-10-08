@@ -18,20 +18,20 @@ pandas = "^2.2.3"
 seaborn = "^0.13.2"
 tqdm = "^4.66.5"
 click = "^8.1.7"
-
-[tool.poetry.dev-dependencies]
+sphinx = "^8.0.2"
+sphinx-rtd-theme = "*"
+sphinx-autoapi = "*"
+myst-parser = "*"
 
 [[tool.poetry.source]]
 name = "pytorch"
 url = "https://anaconda.org/pytorch"
 priority = "supplemental"
 
-
 [[tool.poetry.source]]
 name = "nvidia"
 url = "https://anaconda.org/nvidia"
 priority = "supplemental"
-
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
@@ -47,5 +47,3 @@ testpaths = ["tests"]
 
 [tool.poetry.scripts]
 mri-artefact-detection = "mri_artefact_detection.cli:main"
- 
- 
